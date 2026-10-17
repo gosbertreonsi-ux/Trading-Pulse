@@ -1,0 +1,34 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Represents an individual trade execution in the market
+model Trade {
+  id         String   @id @default(uuid())
+  symbol     String   // e.g., "AAPL"
+  price      Decimal  @db.Decimal(18, 4)
+  quantity   Decimal  @db.Decimal(18, 4)
+  side       String   // "BUY" or "SELL"
+  timestamp  DateTime @default(now())
+
+  @@index([symbol, timestamp(sort: Desc)]) // Makes high-speed history lookups fast
+}
+
+// Stores compiled time buckets for historical candlestick rendering
+model OHLCV {
+  id        String   @id @default(uuid())
+  symbol    String
+  timestamp DateTime
+  open      Decimal  @db.Decimal(18, 4)
+  high      Decimal  @db.Decimal(18, 4)
+  low       Decimal  @db.Decimal(18, 4)
+  close     Decimal  @db.Decimal(18, 4)
+  volume    Decimal  @db.Decimal(18, 4)
+
+  @@unique([symbol, timestamp]) // Prevents duplicate intervals for the same asset
+}
