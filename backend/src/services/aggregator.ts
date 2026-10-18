@@ -3,35 +3,24 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { createClient } from 'redis'
 import 'dotenv/config'
 
-// 1. Re-instantiate standard internal worker clients
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
 const prisma = new PrismaClient({ adapter })
 const redis = createClient()
 
 redis.on('error', (err) => console.error('[AGGREGATOR REDIS ERROR]', err))
-
-// Connect to Redis immediately upon worker import
 redis.connect()
 
 export async function aggregateCandlestick(symbol: string) {
   const redisKey = `ticks:${symbol}`
 
   try {
-    // 2. Atomically fetch and clear ALL waiting trade logs from the Redis list array
-    // This drains the high-speed cache memory space instantly
+    // 1. Fetch all elements currently in the high-speed Redis queue
     const rawTicks = await redis.lRange(redisKey, 0, -1)
     if (!rawTicks || rawTicks.length === 0) return
 
-    // Clear the processed chunk from memory so fresh incoming ticks can accumulate safely
-    await redis.lTrim(redisKey, rawTicks.length, -1)
-
-    // 3. Parse JSON string maps back into object fragments
     const ticks = rawTicks.map((t) => JSON.parse(t))
+    ticks.reverse() // Keep chronological order
 
-    // Sort chronologically (oldest to newest) since lPush pushes to the head
-    ticks.reverse()
-
-    // 4. Extract the standard financial OHLCV metric dimensions mathematically
     const open = parseFloat(ticks[0].price)
     const close = parseFloat(ticks[ticks.length - 1].price)
     
@@ -48,8 +37,8 @@ export async function aggregateCandlestick(symbol: string) {
       totalVolume += quantity
     }
 
-    // 5. Commit the highly compressed historical bar to persistent PostgreSQL storage [MIGRATION.PLANNING_FAILED]
-    const candle = await prisma.oHLCV.create({
+    // 2. Commit the highly compressed historical bar to persistent PostgreSQL storage
+    await prisma.oHLCV.create({
       data: {
         symbol,
         timestamp: new Date(),
@@ -62,6 +51,22 @@ export async function aggregateCandlestick(symbol: string) {
     })
 
     console.log(`📊 [ENGINE] Compacted ${ticks.length} memory ticks into 1m bar for ${symbol} | Close: ${close} | Vol: ${totalVolume.toFixed(2)}`)
+
+    // 3. Instead of wiping the entire list, we only clean up ticks older than 1 minute,
+    // leaving fresh recent ticks in place for the Predictive Engine to read!
+    const clearBeforeTime = Date.now() - 60 * 1000
+    const rawRemaining = await redis.lRange(redisKey, 0, -1)
+    
+    // Reverse find how many items to keep
+    let keepCount = 0
+    for (const raw of rawRemaining) {
+      if (new Date(JSON.parse(raw).timestamp).getTime() > clearBeforeTime) {
+        keepCount++
+      }
+    }
+    
+    // Trim the list to only keep the newest unexpired ticks
+    await redis.lTrim(redisKey, 0, keepCount - 1)
 
   } catch (error) {
     console.error(`❌ [AGGREGATOR ERROR] Failed to compress data for ${symbol}:`, error)
