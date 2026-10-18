@@ -12,6 +12,7 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.5",
     "prisma": "^7.10.1",
     "tsx": "^4.23.15",
@@ -27,6 +28,7 @@
     "axios": "^1.20.0",
     "fastify": "^5.12.7",
     "fastify-plugin": "^6.0.1",
+    "jsonwebtoken": "^9.0.3",
     "redis": "^6.3.0",
     "temporal-polyfill": "^1.0.6"
   }
