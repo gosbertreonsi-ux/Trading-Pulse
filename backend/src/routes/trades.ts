@@ -17,32 +17,59 @@ interface CandlestickQueryQuerystring {
   limit?: string
 }
 
-export default async function tradeRoutes(fastify: FastifyInstance) {
-  // 1. UPDATED: High-Speed POST Ingestion Route utilizing Redis Caching Array
-  fastify.post<{ Body: TradeRequestBody }>('/api/v1/trades', async (request, reply) => {
-    const { symbol, price, quantity, side } = request.body
-
-    try {
-      const tickData = {
-        symbol,
-        price,
-        quantity,
-        side,
-        timestamp: new Date().toISOString()
-      }
-
-      // Append the incoming tick into a high-speed Redis memory list key unique to its symbol
-      // This absorbs high-frequency loads instantly without touching your persistent storage disk
-      await fastify.redis.lPush(`ticks:${symbol}`, JSON.stringify(tickData))
-
-      return reply.code(201).send({ success: true, message: 'Tick cached in Redis' })
-    } catch (error) {
-      fastify.log.error(error)
-      return reply.code(500).send({ success: false, error: 'In-memory caching failed' })
+// Phase 2 Input Mitigation Layer: Strict Ajv Validation Schema
+// This prevents cross-site-scripting and hostile manipulation text from hitting internal memories
+const tradeIngestionSchema = {
+  body: {
+    type: 'object',
+    required: ['symbol', 'price', 'quantity', 'side'],
+    properties: {
+      symbol: { 
+        type: 'string', 
+        minLength: 3, 
+        maxLength: 10, 
+        pattern: '^[A-Z0-9]+\$' // Enforces pure alphanumeric tickers; drops SQL/XSS injections instantly
+      },
+      price: { type: 'number', minimum: 0.000001 },
+      quantity: { type: 'number', minimum: 0.000001 },
+      side: { type: 'string', enum: ['BUY', 'SELL'] }
     }
-  })
+  }
+}
 
-  // 2. GET Route to fetch historical tick streams (Kept for testing compatibility)
+export default async function tradeRoutes(fastify: FastifyInstance) {
+  
+  // 1. High-Speed POST Ingestion Route with Gateway Security Interceptors
+  fastify.post<{ Body: TradeRequestBody }>(
+    '/api/v1/trades', 
+    { 
+      schema: tradeIngestionSchema,
+      preValidation: [fastify.authenticate] // Enforces Cryptographic Token Validation before parsing inputs
+    }, 
+    async (request, reply) => {
+      const { symbol, price, quantity, side } = request.body
+
+      try {
+        const tickData = {
+          symbol,
+          price,
+          quantity,
+          side,
+          timestamp: new Date().toISOString()
+        }
+
+        // Append the verified tick into the high-speed Redis list key
+        await fastify.redis.lPush(`ticks:${symbol}`, JSON.stringify(tickData))
+
+        return reply.code(201).send({ success: true, message: 'Tick verified, authenticated, and cached' })
+      } catch (error) {
+        fastify.log.error(error)
+        return reply.code(500).send({ success: false, error: 'In-memory caching gateway error' })
+      }
+    }
+  )
+
+  // 2. GET Route to fetch historical tick streams
   fastify.get<{ Querystring: TradeQueryQuerystring }>('/api/v1/trades', async (request, reply) => {
     const { symbol, limit } = request.query
     const parsedLimit = limit ? parseInt(limit, 10) : 50
@@ -59,7 +86,7 @@ export default async function tradeRoutes(fastify: FastifyInstance) {
     }
   })
 
-  // 3. GET Route to fetch compiled OHLCV Candlestick Bars
+  // 3. GET Route to fetch compiled OHLCV Candlestick Bars for Charts
   fastify.get<{ Querystring: CandlestickQueryQuerystring }>('/api/v1/charts', async (request, reply) => {
     const { symbol, limit } = request.query
     if (!symbol) {

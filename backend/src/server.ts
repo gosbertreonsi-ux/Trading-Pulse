@@ -1,7 +1,8 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import prismaPlugin from './plugins/db'
-import redisPlugin from './plugins/redis' // Import Redis plugin
+import redisPlugin from './plugins/redis'
+import securityPlugin from './plugins/security' // Import the Phase 2 gateway plugin
 import tradeRoutes from './routes/trades'
 import { aggregateCandlestick } from './services/aggregator'
 
@@ -10,7 +11,8 @@ const fastify = Fastify({ logger: true })
 async function start() {
   await fastify.register(cors, { origin: true })
   await fastify.register(prismaPlugin)
-  await fastify.register(redisPlugin) // Register Redis
+  await fastify.register(redisPlugin)
+  await fastify.register(securityPlugin) // Register your security barrier module
   await fastify.register(tradeRoutes)
 
   try {
