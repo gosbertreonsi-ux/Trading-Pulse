@@ -1,18 +1,16 @@
 import Fastify from 'fastify'
-import cors from '@fastify/cors' // Import the CORS header module
+import cors from '@fastify/cors'
 import prismaPlugin from './plugins/db'
+import redisPlugin from './plugins/redis' // Import Redis plugin
 import tradeRoutes from './routes/trades'
 import { aggregateCandlestick } from './services/aggregator'
 
 const fastify = Fastify({ logger: true })
 
 async function start() {
-  // REGISTER CORS FIRST to unblock local browser requests
-  await fastify.register(cors, { 
-    origin: true // Allows local files and web pages to read your routes safely
-  })
-  
+  await fastify.register(cors, { origin: true })
   await fastify.register(prismaPlugin)
+  await fastify.register(redisPlugin) // Register Redis
   await fastify.register(tradeRoutes)
 
   try {
