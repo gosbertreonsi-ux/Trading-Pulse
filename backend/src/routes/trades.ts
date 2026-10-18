@@ -18,21 +18,31 @@ interface CandlestickQueryQuerystring {
 }
 
 export default async function tradeRoutes(fastify: FastifyInstance) {
-  // 1. High-Speed POST Ingestion Route
+  // 1. UPDATED: High-Speed POST Ingestion Route utilizing Redis Caching Array
   fastify.post<{ Body: TradeRequestBody }>('/api/v1/trades', async (request, reply) => {
     const { symbol, price, quantity, side } = request.body
+
     try {
-      const newTrade = await fastify.db.trade.create({
-        data: { symbol, price, quantity, side },
-      })
-      return reply.code(201).send({ success: true, data: newTrade })
+      const tickData = {
+        symbol,
+        price,
+        quantity,
+        side,
+        timestamp: new Date().toISOString()
+      }
+
+      // Append the incoming tick into a high-speed Redis memory list key unique to its symbol
+      // This absorbs high-frequency loads instantly without touching your persistent storage disk
+      await fastify.redis.lPush(`ticks:${symbol}`, JSON.stringify(tickData))
+
+      return reply.code(201).send({ success: true, message: 'Tick cached in Redis' })
     } catch (error) {
       fastify.log.error(error)
-      return reply.code(500).send({ success: false, error: 'Database ingestion failed' })
+      return reply.code(500).send({ success: false, error: 'In-memory caching failed' })
     }
   })
 
-  // 2. GET Route to fetch historical tick streams
+  // 2. GET Route to fetch historical tick streams (Kept for testing compatibility)
   fastify.get<{ Querystring: TradeQueryQuerystring }>('/api/v1/trades', async (request, reply) => {
     const { symbol, limit } = request.query
     const parsedLimit = limit ? parseInt(limit, 10) : 50
@@ -49,26 +59,19 @@ export default async function tradeRoutes(fastify: FastifyInstance) {
     }
   })
 
-  // 3. NEW: GET Route to fetch compiled OHLCV Candlestick Bars
+  // 3. GET Route to fetch compiled OHLCV Candlestick Bars
   fastify.get<{ Querystring: CandlestickQueryQuerystring }>('/api/v1/charts', async (request, reply) => {
     const { symbol, limit } = request.query
-    
-    // Validate that the client provided a target ticker asset
     if (!symbol) {
       return reply.code(400).send({ success: false, error: 'Query parameter "symbol" is required' })
     }
-
     const parsedLimit = limit ? parseInt(limit, 10) : 100
-
     try {
       const candles = await fastify.db.oHLCV.findMany({
         where: { symbol },
-        orderBy: { timestamp: 'desc' }, // Get the newest candlesticks first
+        orderBy: { timestamp: 'desc' },
         take: parsedLimit,
       })
-
-      // Reverse the array before sending it back so that the historical feed 
-      // flows from oldest -> newest, which is the exact layout charting libraries require
       return reply.send({ success: true, symbol, data: candles.reverse() })
     } catch (error) {
       fastify.log.error(error)

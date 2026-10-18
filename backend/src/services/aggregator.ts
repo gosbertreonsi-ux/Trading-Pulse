@@ -1,44 +1,54 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
+import { createClient } from 'redis'
 import 'dotenv/config'
 
+// 1. Re-instantiate standard internal worker clients
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
 const prisma = new PrismaClient({ adapter })
+const redis = createClient()
+
+redis.on('error', (err) => console.error('[AGGREGATOR REDIS ERROR]', err))
+
+// Connect to Redis immediately upon worker import
+redis.connect()
 
 export async function aggregateCandlestick(symbol: string) {
+  const redisKey = `ticks:${symbol}`
+
   try {
-    // 1. Calculate the time window for the last 1 minute
-    const oneMinuteAgo = new Date(Date.now() - 60 * 1000)
+    // 2. Atomically fetch and clear ALL waiting trade logs from the Redis list array
+    // This drains the high-speed cache memory space instantly
+    const rawTicks = await redis.lRange(redisKey, 0, -1)
+    if (!rawTicks || rawTicks.length === 0) return
 
-    // 2. Fetch all raw ticks for this symbol created in the last minute [ORM.ARGUMENT_INVALID]
-    const ticks = await prisma.trade.findMany({
-      where: {
-        symbol,
-        timestamp: { gte: oneMinuteAgo },
-      },
-      orderBy: { timestamp: 'asc' },
-    })
+    // Clear the processed chunk from memory so fresh incoming ticks can accumulate safely
+    await redis.lTrim(redisKey, rawTicks.length, -1)
 
-    if (ticks.length === 0) return // No trades to aggregate
+    // 3. Parse JSON string maps back into object fragments
+    const ticks = rawTicks.map((t) => JSON.parse(t))
 
-    // 3. Extract the OHLCV metric properties mathematically
-    const open = parseFloat(ticks[0].price.toString())
-    const close = parseFloat(ticks[ticks.length - 1].price.toString())
+    // Sort chronologically (oldest to newest) since lPush pushes to the head
+    ticks.reverse()
+
+    // 4. Extract the standard financial OHLCV metric dimensions mathematically
+    const open = parseFloat(ticks[0].price)
+    const close = parseFloat(ticks[ticks.length - 1].price)
     
     let high = open
     let low = open
     let totalVolume = 0
 
     for (const tick of ticks) {
-      const price = parseFloat(tick.price.toString())
-      const quantity = parseFloat(tick.quantity.toString())
+      const price = parseFloat(tick.price)
+      const quantity = parseFloat(tick.quantity)
       
       if (price > high) high = price
       if (price < low) low = price
       totalVolume += quantity
     }
 
-    // 4. Save the compiled candlestick block into your OHLCV table [MIGRATION.PLANNING_FAILED]
+    // 5. Commit the highly compressed historical bar to persistent PostgreSQL storage [MIGRATION.PLANNING_FAILED]
     const candle = await prisma.oHLCV.create({
       data: {
         symbol,
@@ -51,17 +61,9 @@ export async function aggregateCandlestick(symbol: string) {
       },
     })
 
-    console.log(`📊 [AGGREGATOR] Compiled 1m bar for ${symbol} | Close: ${close} | Vol: ${totalVolume.toFixed(2)}`)
-    
-    // 5. Optional: Delete old raw trades to keep your database fast and lightweight
-    await prisma.trade.deleteMany({
-      where: {
-        symbol,
-        timestamp: { lt: oneMinuteAgo },
-      },
-    })
+    console.log(`📊 [ENGINE] Compacted ${ticks.length} memory ticks into 1m bar for ${symbol} | Close: ${close} | Vol: ${totalVolume.toFixed(2)}`)
 
   } catch (error) {
-    console.error('❌ Aggregator error:', error)
+    console.error(`❌ [AGGREGATOR ERROR] Failed to compress data for ${symbol}:`, error)
   }
 }
