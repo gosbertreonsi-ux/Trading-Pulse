@@ -22,6 +22,7 @@
     "@prisma/client": "^7.10.1",
     "@prisma/orm-postgres": "^8.0.0-rc.18",
     "fastify": "^5.12.7",
+    "fastify-plugin": "^6.0.1",
     "temporal-polyfill": "^1.0.6"
   }
 }
