@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Trading-Pulse Phase 4 Capstone Interface</title>
-  <!-- Switched to a robust, enterprise mirror CDN to guarantee the library mounts natively -->
-  <script src="https://cloudflare.com"></script>
+  <title>Trading-Pulse Control Center</title>
+  <!-- Alternative High-Availability Mirror to guarantee script execution -->
+  <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -67,77 +67,89 @@
   </div>
 
   <script>
-    // 1. Initialize Visual Candlestick Matrix Configurations
-    const chart = LightweightCharts.createChart(document.getElementById('chart-container'), {
-      layout: { backgroundColor: '#131722', textColor: '#d1d4dc' },
-      grid: { vertLines: { color: '#1f222e' }, horzLines: { color: '#1f222e' } },
-      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-      timeScale: { timeVisible: true, secondsVisible: true }
-    });
+    // Safe wrapper check to prevent crashes if the network completely drops the script load
+    function initChartDashboard() {
+      if (typeof LightweightCharts === 'undefined') {
+        document.body.innerHTML = `<div style="color: #ef5350; padding: 40px; font-size: 1.2rem; text-align: center;">
+          <strong>⚠️ Architecture Error:</strong> Visual library failed to mount onto the page context. 
+          Please verify internet connectivity or ensure no network firewall blocks are active.
+        </div>`;
+        return;
+      }
 
-    const candlestickSeries = chart.addCandlestickSeries({
-      upColor: '#26a69a', downColor: '#ef5350',
-      borderUpColor: '#26a69a', borderDownColor: '#ef5350',
-      wickUpColor: '#26a69a', wickDownColor: '#ef5350',
-    });
+      // 1. Initialize Visual Candlestick Matrix Configurations
+      const chart = LightweightCharts.createChart(document.getElementById('chart-container'), {
+        layout: { backgroundColor: '#131722', textColor: '#d1d4dc' },
+        grid: { vertLines: { color: '#1f222e' }, horzLines: { color: '#1f222e' } },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        timeScale: { timeVisible: true, secondsVisible: true }
+      });
 
-    // 2. Fetch baseline data bars on primary load to map historical layout context
-    async function loadHistoricalData() {
-      try {
-        const response = await fetch('http://localhost:3000/api/v1/charts?symbol=BTCUSDT&limit=50');
-        const result = await response.json();
-        if (result.success && result.data.length > 0) {
-          const formatted = result.data.map(c => ({
-            time: Math.floor(new Date(c.timestamp).getTime() / 1000),
-            open: parseFloat(c.open), high: parseFloat(c.high),
-            low: parseFloat(c.low), close: parseFloat(c.close)
-          }));
-          candlestickSeries.setData(formatted);
-        }
-      } catch (e) { console.error('History load failed:', e); }
+      const candlestickSeries = chart.addCandlestickSeries({
+        upColor: '#26a69a', downColor: '#ef5350',
+        borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+        wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+      });
+
+      // 2. Fetch baseline data bars on primary load
+      async function loadHistoricalData() {
+        try {
+          const response = await fetch('http://localhost:3000/api/v1/charts?symbol=BTCUSDT&limit=50');
+          const result = await response.json();
+          if (result.success && result.data.length > 0) {
+            const formatted = result.data.map(c => ({
+              time: Math.floor(new Date(c.timestamp).getTime() / 1000),
+              open: parseFloat(c.open), high: parseFloat(c.high),
+              low: parseFloat(c.low), close: parseFloat(c.close)
+            }));
+            candlestickSeries.setData(formatted);
+          }
+        } catch (e) { console.error('History load failed:', e); }
+      }
+
+      // 3. Establish the persistent, low-latency WebSocket data channel
+      function connectToStream() {
+        const socket = new WebSocket('ws://localhost:3000/api/v1/stream');
+        const statusLabel = document.getElementById('stream-status');
+
+        socket.onopen = () => {
+          statusLabel.textContent = 'CONNECTED';
+          statusLabel.style.color = '#26a69a';
+          console.log('[WEBSOCKET] Streaming channel bound.');
+        };
+
+        socket.onclose = () => {
+          statusLabel.textContent = 'DISCONNECTED';
+          statusLabel.style.color = '#ef5350';
+          setTimeout(connectToStream, 3000);
+        };
+
+        socket.onmessage = (event) => {
+          const message = JSON.parse(event.data);
+          
+          if (message.type === 'ALERT') {
+            const feed = document.getElementById('alerts-feed');
+            const isBullish = message.condition.includes('BULLISH');
+            
+            const card = document.createElement('div');
+            card.className = `alert-card ${isBullish ? 'bullish' : 'bearish'}`;
+            card.innerHTML = `
+              <strong>${message.symbol}</strong>: ${message.condition}<br/>
+              Price: $${message.price.toFixed(2)} | Dev: ${message.deviation.toFixed(3)}%<br/>
+              <small>${new Date(message.timestamp).toLocaleTimeString()}</small>
+            `;
+            
+            feed.insertBefore(card, feed.firstChild);
+            if (feed.children.length > 12) feed.removeChild(feed.lastChild);
+          }
+        };
+      }
+
+      loadHistoricalData().then(() => connectToStream());
     }
 
-    // 3. Establish the persistent, low-latency WebSocket data channel
-    function connectToStream() {
-      const socket = new WebSocket('ws://localhost:3000/api/v1/stream');
-      const statusLabel = document.getElementById('stream-status');
-
-      socket.onopen = () => {
-        statusLabel.textContent = 'CONNECTED';
-        statusLabel.style.color = '#26a69a';
-        console.log('[WEBSOCKET] Successfully bound streaming pipe layout.');
-      };
-
-      socket.onclose = () => {
-        statusLabel.textContent = 'DISCONNECTED';
-        statusLabel.style.color = '#ef5350';
-        setTimeout(connectToStream, 3000);
-      };
-
-      socket.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        
-        if (message.type === 'ALERT') {
-          const feed = document.getElementById('alerts-feed');
-          const isBullish = message.condition.includes('BULLISH');
-          
-          const card = document.createElement('div');
-          card.className = `alert-card ${isBullish ? 'bullish' : 'bearish'}`;
-          card.innerHTML = `
-            <strong>${message.symbol}</strong>: ${message.condition}<br/>
-            Price: $${message.price.toFixed(2)} | Dev: ${message.deviation.toFixed(3)}%<br/>
-            <small>${new Date(message.timestamp).toLocaleTimeString()}</small>
-          `;
-          
-          feed.insertBefore(card, feed.firstChild);
-          
-          if (feed.children.length > 12) feed.removeChild(feed.lastChild);
-        }
-      };
-    }
-
-    // Fire scripts
-    loadHistoricalData().then(() => connectToStream());
+    // Fire initialization after DOM loading completes safely
+    window.addEventListener('DOMContentLoaded', initChartDashboard);
   </script>
 </body>
 </html>
