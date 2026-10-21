@@ -8,17 +8,19 @@ generator client {
 
 model Trade {
   id        String   @id @default(uuid())
+  clientId  String   @default("global") // NEW: Isolates client environments
   symbol    String
   price     Decimal  @db.Decimal(18, 4)
   quantity  Decimal  @db.Decimal(18, 4)
   side      String
   timestamp DateTime @default(now())
 
-  @@index([symbol, timestamp])
+  @@index([clientId, symbol, timestamp]) // Optimized compound multi-tenant index
 }
 
 model OHLCV {
   id        String   @id @default(uuid())
+  clientId  String   @default("global") // NEW: Isolates chart panels
   symbol    String
   timestamp DateTime
   open      Decimal  @db.Decimal(18, 4)
@@ -27,5 +29,5 @@ model OHLCV {
   close     Decimal  @db.Decimal(18, 4)
   volume    Decimal  @db.Decimal(18, 4)
 
-  @@unique([symbol, timestamp])
+  @@unique([clientId, symbol, timestamp]) // Ensures data isolation uniqueness
 }

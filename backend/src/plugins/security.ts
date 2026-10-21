@@ -3,20 +3,33 @@ import { FastifyPluginAsync } from 'fastify'
 import helmet from '@fastify/helmet'
 import jwt from '@fastify/jwt'
 
+// Inject custom properties into Fastify's native request object type definitions
+declare module 'fastify' {
+  interface FastifyRequest {
+    tenant: {
+      clientId: string
+      role: string
+    }
+  }
+}
+
 const securityPlugin: FastifyPluginAsync = async (fastify) => {
-  // 1. Register Helmet to append zero-trust HTTP security frames globally
   await fastify.register(helmet, { contentSecurityPolicy: true })
 
-  // 2. Register JSON Web Token parsing layer with a secure environment signature string
   await fastify.register(jwt, {
     secret: process.env.JWT_SECRET || 'SUPER_SECURE_COMPLIANCE_GATEWAY_TOKEN_SECRET_KEY_123!'
   })
 
-  // 3. Decorate Fastify instance with a global validation middleware interceptor hook
   fastify.decorate('authenticate', async (request, reply) => {
     try {
-      // Automatically parses Authorization headers ('Bearer <token>') and validates integrity
-      await request.jwtVerify()
+      // Decode the token payload
+      const decoded: any = await request.jwtVerify()
+      
+      // Extract client information and link it straight to the request lifecycle context
+      request.tenant = {
+        clientId: decoded.client || 'global',
+        role: decoded.role || 'viewer'
+      }
     } catch (err) {
       return reply.code(401).send({ 
         success: false, 
