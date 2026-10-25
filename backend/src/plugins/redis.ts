@@ -18,7 +18,7 @@ const redisPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.log.info('⚡ Redis Cache Layer connected successfully')
 
   // Decorate Fastify so we can call it via fastify.redis
-  fastify.decorate('redis', client)
+  fastify.decorate('redis', client as never)
 
   fastify.addHook('onClose', async (server) => {
     await server.redis.quit()
