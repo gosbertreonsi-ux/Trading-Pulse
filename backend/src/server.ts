@@ -10,6 +10,7 @@ import { aggregateCandlestick } from './services/aggregator'
 import { evaluateMarketTrend } from './services/predictiveCore'
 
 const fastify = Fastify({ logger: true })
+const SIMULATOR_CLIENT_ID = 'trading-pulse-simulator-agent'
 
 async function start() {
   await fastify.register(cors, { origin: true })
@@ -26,16 +27,16 @@ async function start() {
     await fastify.listen({ port: 3000, host: '0.0.0.0' })
     console.log('🚀 Trading-Pulse ingestion server running on port 3000')
 
-    setInterval(async () => {
-      await aggregateCandlestick('BTCUSDT')
-      await aggregateCandlestick('ETHUSDT')
-      await aggregateCandlestick('SOLUSDT')
-    }, 10000)
+setInterval(async () => {
+  await aggregateCandlestick('BTCUSDT', SIMULATOR_CLIENT_ID)
+  await aggregateCandlestick('ETHUSDT', SIMULATOR_CLIENT_ID)
+  await aggregateCandlestick('SOLUSDT', SIMULATOR_CLIENT_ID)
+}, 10000)
 
     setInterval(async () => {
-      await evaluateMarketTrend('BTCUSDT')
-      await evaluateMarketTrend('ETHUSDT')
-      await evaluateMarketTrend('SOLUSDT')
+      await evaluateMarketTrend('BTCUSDT', SIMULATOR_CLIENT_ID)
+      await evaluateMarketTrend('ETHUSDT', SIMULATOR_CLIENT_ID)
+      await evaluateMarketTrend('SOLUSDT', SIMULATOR_CLIENT_ID)
     }, 2000)
 
   } catch (err) {

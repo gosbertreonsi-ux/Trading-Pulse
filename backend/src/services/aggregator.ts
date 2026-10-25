@@ -10,8 +10,11 @@ const redis = createClient()
 redis.on('error', (err) => console.error('[AGGREGATOR REDIS ERROR]', err))
 redis.connect()
 
-export async function aggregateCandlestick(symbol: string) {
-  const redisKey = `ticks:${symbol}`
+export async function aggregateCandlestick(
+  symbol: string,
+  clientId: string
+) {
+  const redisKey = `ticks:${clientId}:${symbol}`
 
   try {
     // 1. Fetch all elements currently in the high-speed Redis queue
@@ -40,6 +43,7 @@ export async function aggregateCandlestick(symbol: string) {
     // 2. Commit the highly compressed historical bar to persistent PostgreSQL storage
     await prisma.oHLCV.create({
       data: {
+        clientId,
         symbol,
         timestamp: new Date(),
         open,

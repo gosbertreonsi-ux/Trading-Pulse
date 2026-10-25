@@ -12,10 +12,12 @@ interface TickerSnapshot {
   timestamp: string
 }
 
-export async function evaluateMarketTrend(symbol: string) {
+export async function evaluateMarketTrend(
+  symbol: string,
+  clientId: string
+) {
   try {
-    const redisKey = `ticks:${symbol}`
-    
+    const redisKey = `ticks:${clientId}:${symbol}`
     const rawTicks = await redis.lRange(redisKey, 0, 19)
     if (!rawTicks || rawTicks.length < 3) return 
 
