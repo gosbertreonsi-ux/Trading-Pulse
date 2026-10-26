@@ -76,7 +76,7 @@ export default function Home() {
           <div className="tp-metric">
             <div className="tp-metric-heading"><span>DATA STREAM</span><span className="tp-status-orb" /></div>
             <div className="tp-metric-value tp-metric-smaller">SIMULATED</div>
-            <div className="tp-metric-foot">Charts refresh every 10 seconds</div>
+            <div className="tp-metric-foot">Local dev stream · 60s backup refresh</div>
           </div>
         </div>
 
