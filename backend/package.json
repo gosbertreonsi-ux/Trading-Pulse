@@ -4,12 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "postinstall": "prisma skills sync || exit 0",
     "dev": "tsx watch src/server.ts",
     "build": "tsc --noEmit",
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --test"
+    "test": "tsx --test src/services/candleMath.test.ts src/services/aggregator.test.ts"
   },
   "keywords": [],
   "author": "",
