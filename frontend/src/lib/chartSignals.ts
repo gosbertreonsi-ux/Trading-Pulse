@@ -1,4 +1,4 @@
-import type { CandlestickData, SeriesMarker, Time } from "lightweight-charts";
+import type { CandlestickData, LineData, SeriesMarker, Time } from "lightweight-charts";
 
 /**
  * Educational-only 5/12 close-price SMA crossovers.
@@ -48,4 +48,22 @@ export function movingAverageMarkers(
   }
 
   return markers;
+}
+
+/** SMA line from observed candle closes. No extrapolated points are drawn. */
+export function movingAverageLine(
+  candles: readonly CandlestickData<Time>[],
+  period: number,
+): LineData<Time>[] {
+  if (!Number.isInteger(period) || period < 1) return [];
+  const result: LineData<Time>[] = [];
+  let sum = 0;
+  for (let index = 0; index < candles.length; index++) {
+    sum += candles[index].close;
+    if (index >= period) sum -= candles[index - period].close;
+    if (index >= period - 1) {
+      result.push({ time: candles[index].time, value: sum / period });
+    }
+  }
+  return result;
 }
