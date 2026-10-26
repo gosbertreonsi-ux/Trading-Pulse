@@ -502,3 +502,35 @@ textarea:focus-visible {
   .tp-chart-display { height:350px; min-height:350px; }
   .tp-timeframe-strip { gap:3px; }
 }
+
+
+/* Stream is a *transport* status, not a claim of live trade execution. */
+.tp-stream-state {
+  position: absolute;
+  left: 14px;
+  bottom: 15px;
+  z-index: 4;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .07em;
+  opacity: .9;
+}
+.tp-stream-led {
+  width: 6px;
+  height: 6px;
+  background: var(--warning);
+  border-radius: 50%;
+}
+.tp-stream-state-live { color: var(--positive); border-color: rgba(49,223,172,.27); }
+.tp-stream-state-live .tp-stream-led { background: var(--positive); box-shadow: 0 0 7px var(--positive); }
+.tp-stream-state-fallback .tp-stream-led { background: var(--warning); box-shadow: none; }
+.tp-stream-state-connecting .tp-stream-led { background: var(--subtle); }

@@ -150,6 +150,7 @@ export default function MarketChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
+  const [streamStatus, setStreamStatus] = useState<"connecting" | "live" | "fallback">("connecting");
 
   useEffect(() => {
     const container = containerRef.current;
@@ -158,7 +159,9 @@ export default function MarketChart({
     let cancelled = false;
     let hasLoadedData = false;
     let fetching = false;
+    let reloadPending = false;
     setStatus("loading");
+    setStreamStatus(process.env.NODE_ENV === "development" ? "connecting" : "fallback");
     onSnapshot?.(null);
     const variable = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 
@@ -249,7 +252,10 @@ export default function MarketChart({
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
     const loadCandles = async () => {
-      if (fetching) return;
+      if (fetching) {
+        reloadPending = true;
+        return;
+      }
       fetching = true;
       try {
         const previousRange = hasLoadedData
@@ -312,6 +318,10 @@ export default function MarketChart({
         console.error("Unable to load market candles:", error);
       } finally {
         fetching = false;
+        if (reloadPending && !cancelled) {
+          reloadPending = false;
+          void loadCandles();
+        }
       }
     };
 
@@ -327,13 +337,38 @@ export default function MarketChart({
     resizeObserver.observe(container);
 
     void loadCandles();
+
+    // EventSource is connected only to Next.js, never directly to the backend.
+    // The Next route keeps the viewer JWT private and forwards only a notification.
+    // Fall back to occasional REST refreshes if the stream is not available.
+    let stream: EventSource | undefined;
+    if (process.env.NODE_ENV === "development") {
+      stream = new EventSource("/api/stream?symbol=" + encodeURIComponent(symbol));
+      stream.addEventListener("ready", () => {
+        if (!cancelled) {
+          setStreamStatus("live");
+          void loadCandles(); // Catch events missed between initial fetch and handshake.
+        }
+      });
+      stream.addEventListener("candle", () => {
+        if (!cancelled) void loadCandles();
+      });
+      stream.addEventListener("offline", () => {
+        if (!cancelled) setStreamStatus("fallback");
+      });
+      stream.onerror = () => {
+        if (!cancelled) setStreamStatus("fallback");
+      };
+    }
+
     const timer = setInterval(() => {
       void loadCandles();
-    }, 10000);
+    }, 60_000);
 
     return () => {
       cancelled = true;
       clearInterval(timer);
+      stream?.close();
       resizeObserver.disconnect();
       themeObserver.disconnect();
       chart.remove();
@@ -344,6 +379,10 @@ export default function MarketChart({
   return (
     <div className="tp-chart-stage">
       <div ref={containerRef} className="market-chart" aria-label={symbol + " " + timeframe + " candlestick chart"} />
+      <div className={"tp-stream-state tp-stream-state-" + streamStatus} role="status" aria-live="polite">
+        <span className="tp-stream-led" aria-hidden="true" />
+        {streamStatus === "live" ? "LIVE CANDLE UPDATES" : streamStatus === "connecting" ? "CONNECTING TO STREAM" : "REST FALLBACK · 60S"}
+      </div>
       {status !== "ready" && (
         <div className="tp-chart-state" role="status" aria-live="polite">
           <span className="tp-chart-state-glyph" aria-hidden="true">⌁</span>
