@@ -11,7 +11,7 @@ Trading Pulse is a market-data analytics **simulator**. Its ticks may use market
 5. Run `npx tsx src/generateToken.ts` to create a **24-hour** simulator JWT and copy it into `SIMULATOR_TOKEN`.
 6. Run `npm run dev` for Fastify, and in a separate terminal run `npx tsx src/simulator.ts` for the simulated tick feed.
 
-The API listens on port 3000. Set the Next.js server-side `TRADING_PULSE_API_TOKEN` to a **valid JWT**, not the signing secret. Both environments must be configured consistently.
+The API listens on port 3000. Set the Next.js server-side `TRADING_PULSE_VIEWER_JWT` to a **valid JWT** with the same tenant client claim as the simulator, not the signing secret. Keep the backend signing secret only on trusted servers. In production use a dedicated read-only viewer token and short-lived authentication.
 
 ### Security reminders
 
