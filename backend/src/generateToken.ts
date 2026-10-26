@@ -1,19 +1,20 @@
+import 'dotenv/config'
 import jwt from 'jsonwebtoken'
 
-// Use the exact same signature key fallback from our security plugin
-const SECRET = 'SUPER_SECURE_COMPLIANCE_GATEWAY_TOKEN_SECRET_KEY_123!'
-
-function generateApiKey() {
-  const payload = {
-    client: 'trading-pulse-simulator-agent',
-    role: 'high_frequency_ingestion_worker'
-  }
-
-  // Sign the token with no expiration so our worker loop never drops mid-ingestion
-  const token = jwt.sign(payload, SECRET)
-  
-  console.log('🔑 [COMPLIANCE GATEWAY] Generated Valid Cryptographic API Token:\n')
-  console.log(`Bearer ${token}`)
+const secret = process.env.TRADING_PULSE_API_TOKEN
+if (!secret || secret.length < 32) {
+  throw new Error('Set TRADING_PULSE_API_TOKEN to a strong secret (at least 32 characters) before generating a worker token')
 }
 
-generateApiKey()
+const token = jwt.sign(
+  {
+    client: 'trading-pulse-simulator-agent',
+    role: 'high_frequency_ingestion_worker'
+  },
+  secret,
+  { expiresIn: '24h' }
+)
+
+console.log('Simulator token (expires in 24 hours):')
+console.log(token)
+console.log('Store this token in SIMULATOR_TOKEN. Never commit it to Git.')

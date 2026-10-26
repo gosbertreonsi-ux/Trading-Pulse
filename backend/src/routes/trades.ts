@@ -55,6 +55,9 @@ export default async function tradeRoutes(fastify: FastifyInstance) {
       }
 
       const clientId = request.tenant.clientId
+      if (request.tenant.role !== 'high_frequency_ingestion_worker') {
+        return reply.code(403).send({ success: false, error: 'Ingestion role required' })
+      }
 
       try {
         const tickData = {
