@@ -5,10 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
+  LineSeries,
+  LineStyle,
+  createSeriesMarkers,
   type IChartApi,
   type CandlestickData,
   type Time,
 } from "lightweight-charts";
+import { movingAverageLine, movingAverageMarkers } from "@/lib/chartSignals";
 
 export type MarketSnapshot = {
   price: number;
@@ -151,6 +155,14 @@ export default function MarketChart({
   const chartRef = useRef<IChartApi | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
   const [streamStatus, setStreamStatus] = useState<"connecting" | "live" | "fallback">("connecting");
+  const [showSignals, setShowSignals] = useState(true);
+  const signalsEnabled = useRef(true);
+  const overlayUpdate = useRef<((enabled: boolean) => void) | null>(null);
+
+  useEffect(() => {
+    signalsEnabled.current = showSignals;
+    overlayUpdate.current?.(showSignals);
+  }, [showSignals]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -169,7 +181,7 @@ export default function MarketChart({
       width: container.clientWidth,
       height: container.clientHeight || 600,
       layout: {
-        background: { color: variable("--surface", "#0d121c") },
+        background: { color: "rgba(0, 0, 0, 0)" },
         textColor: variable("--muted", "#9aaac0"),
         attributionLogo: false,
       },
@@ -181,17 +193,17 @@ export default function MarketChart({
         borderColor: "rgba(151,169,196,0.14)",
         autoScale: true,
         scaleMargins: {
-          top: 0.08,
-          bottom: 0.08,
+          top: 0.20,
+          bottom: 0.16,
         },
       },
       timeScale: {
         borderColor: "rgba(151,169,196,0.14)",
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 5,
-        barSpacing: 5,
-        minBarSpacing: 2,
+        rightOffset: 9,
+        barSpacing: 9,
+        minBarSpacing: 3,
       },
       crosshair: {
         vertLine: {
@@ -219,11 +231,11 @@ export default function MarketChart({
     chartRef.current = chart;
 
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#31dfac",
-      downColor: "#fb6877",
+      upColor: "#08edae",
+      downColor: "#ff4768",
       borderVisible: false,
-      wickUpColor: "#31dfac",
-      wickDownColor: "#fb6877",
+      wickUpColor: "#08edae",
+      wickDownColor: "#ff4768",
       wickVisible: true,
       priceLineVisible: true,
     });
