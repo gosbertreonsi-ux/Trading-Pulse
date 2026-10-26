@@ -1,48 +1,85 @@
+import 'dotenv/config'
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
-import fws from '@fastify/websocket' // Import the fastify websocket module
+import fws from '@fastify/websocket'
 import prismaPlugin from './plugins/db'
 import redisPlugin from './plugins/redis'
 import securityPlugin from './plugins/security'
 import tradeRoutes from './routes/trades'
-import streamingRoutes from './routes/streams' // Import our stream routes
+import streamingRoutes from './routes/streams'
 import { aggregateCandlestick } from './services/aggregator'
 import { evaluateMarketTrend } from './services/predictiveCore'
 
 const fastify = Fastify({ logger: true })
 const SIMULATOR_CLIENT_ID = 'trading-pulse-simulator-agent'
+const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'] as const
 
-async function start() {
+async function start(): Promise<void> {
   await fastify.register(cors, { origin: true })
-  await fastify.register(fws) // Register WebSocket protocol support
+  await fastify.register(fws)
   await fastify.register(prismaPlugin)
   await fastify.register(redisPlugin)
   await fastify.register(securityPlugin)
-  
-  // Register routes
   await fastify.register(tradeRoutes)
   await fastify.register(streamingRoutes)
 
-  try {
-    await fastify.listen({ port: 3000, host: '0.0.0.0' })
-    console.log('🚀 Trading-Pulse ingestion server running on port 3000')
+  let aggregating = false
+  let predicting = false
 
-setInterval(async () => {
-  await aggregateCandlestick('BTCUSDT', SIMULATOR_CLIENT_ID)
-  await aggregateCandlestick('ETHUSDT', SIMULATOR_CLIENT_ID)
-  await aggregateCandlestick('SOLUSDT', SIMULATOR_CLIENT_ID)
-}, 10000)
-
-    setInterval(async () => {
-      await evaluateMarketTrend('BTCUSDT', SIMULATOR_CLIENT_ID)
-      await evaluateMarketTrend('ETHUSDT', SIMULATOR_CLIENT_ID)
-      await evaluateMarketTrend('SOLUSDT', SIMULATOR_CLIENT_ID)
-    }, 2000)
-
-  } catch (err) {
-    fastify.log.error(err)
-    process.exit(1)
+  const aggregateMarkets = async () => {
+    if (aggregating) return
+    aggregating = true
+    try {
+      for (const symbol of SYMBOLS) {
+        try {
+          const count = await aggregateCandlestick(fastify, symbol, SIMULATOR_CLIENT_ID)
+          if (count > 0) fastify.log.info({ symbol, count }, 'Completed candle changes')
+        } catch (error) {
+          fastify.log.error({ err: error, symbol }, 'Candle aggregation failed')
+        }
+      }
+    } finally {
+      aggregating = false
+    }
   }
+
+  const predictMarkets = async () => {
+    if (predicting) return
+    predicting = true
+    try {
+      for (const symbol of SYMBOLS) {
+        try {
+          await evaluateMarketTrend(fastify, symbol, SIMULATOR_CLIENT_ID)
+        } catch (error) {
+          fastify.log.warn({ err: error, symbol }, 'Predictive cache unavailable')
+        }
+      }
+    } finally {
+      predicting = false
+    }
+  }
+
+  let candleTimer: ReturnType<typeof setInterval> | undefined
+  let predictionTimer: ReturnType<typeof setInterval> | undefined
+  fastify.addHook('onClose', async () => {
+    if (candleTimer) clearInterval(candleTimer)
+    if (predictionTimer) clearInterval(predictionTimer)
+  })
+
+  await fastify.listen({
+    port: Number(process.env.PORT ?? 3000),
+    host: process.env.HOST ?? '127.0.0.1'
+  })
+
+  candleTimer = setInterval(() => { void aggregateMarkets() }, 10_000)
+  predictionTimer = setInterval(() => { void predictMarkets() }, 2_000)
+
+  // Do not wait for the first interval to check for previously completed candles.
+  void aggregateMarkets()
+  fastify.log.info('Trading Pulse market analytics backend is running')
 }
 
-start()
+start().catch(error => {
+  fastify.log.error(error)
+  process.exitCode = 1
+})

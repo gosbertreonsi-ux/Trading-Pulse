@@ -69,21 +69,36 @@ export default async function tradeRoutes(fastify: FastifyInstance) {
           timestamp: new Date().toISOString()
         }
 
-        // Use the same key convention in ingestion and aggregation.
-        await fastify.redis.lPush(
-          `ticks:${clientId}:${symbol}`,
-          JSON.stringify(tickData)
-        )
+        // Persist the tick first: PostgreSQL is the durable market-data source.
+        // Aggregation can recover these trades after a Redis interruption.
+        const saved = await fastify.db.trade.create({ data: tickData })
+
+        // Redis is a bounded, best-effort hot cache for predictive analytics.
+        // A cache outage must not erase an already committed trade.
+        let cached = false
+        try {
+          const key = `ticks:${clientId}:${symbol}`
+          await fastify.redis.multi()
+            .lPush(key, JSON.stringify(tickData))
+            .lTrim(key, 0, 1999)
+            .expire(key, 86_400)
+            .exec()
+          cached = true
+        } catch (cacheError) {
+          fastify.log.warn({ err: cacheError, symbol }, 'Tick persisted, Redis cache unavailable')
+        }
 
         return reply.code(202).send({
           success: true,
-          message: 'Tick accepted for processing'
+          id: saved.id,
+          cached,
+          message: cached ? 'Tick persisted and cached' : 'Tick persisted; predictive cache delayed'
         })
       } catch (error) {
         fastify.log.error(error)
         return reply.code(503).send({
           success: false,
-          error: 'Market tick could not be queued'
+          error: 'Market tick could not be persisted'
         })
       }
     }
