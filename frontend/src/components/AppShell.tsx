@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
 type AppShellProps = { children: ReactNode };
 
@@ -11,22 +11,31 @@ const navigation = [
   { href: "/studio", label: "AI Studio", glyph: "✳", description: "Build workspace" },
 ];
 
+function readTheme(): "dark" | "light" {
+  if (typeof window === "undefined") return "dark";
+  return window.localStorage.getItem("trading-pulse-theme") === "light" ? "light" : "dark";
+}
+
+function subscribeToTheme(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  window.addEventListener("trading-pulse-theme-change", onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener("trading-pulse-theme-change", onChange);
+  };
+}
+
 export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const theme = useSyncExternalStore(subscribeToTheme, readTheme, () => "dark");
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("trading-pulse-theme");
-    const next = saved === "light" ? "light" : "dark";
-    setTheme(next);
-    document.documentElement.dataset.theme = next;
-  }, []);
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    document.documentElement.dataset.theme = next;
-    window.localStorage.setItem("trading-pulse-theme", next);
+    window.localStorage.setItem("trading-pulse-theme", theme === "dark" ? "light" : "dark");
+    window.dispatchEvent(new Event("trading-pulse-theme-change"));
   }
 
   const isStudio = pathname.startsWith("/studio");
