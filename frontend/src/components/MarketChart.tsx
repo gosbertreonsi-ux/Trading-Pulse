@@ -329,6 +329,8 @@ export default function MarketChart({
         const candles = groupCandles(rawCandles, timeframe);
 
         if (candles.length === 0) {
+          latestCandles = [];
+          updateOverlay(false);
           series.setData([]);
           setStatus("empty");
           onSnapshot?.(null);
@@ -336,6 +338,8 @@ export default function MarketChart({
         }
 
         series.setData(candles);
+        latestCandles = candles;
+        updateOverlay(signalsEnabled.current);
         setStatus("ready");
         const first = candles[0];
         const last = candles[candles.length - 1];
@@ -413,6 +417,7 @@ export default function MarketChart({
       stream?.close();
       resizeObserver.disconnect();
       themeObserver.disconnect();
+      overlayUpdate.current = null;
       chart.remove();
       chartRef.current = null;
     };
@@ -421,6 +426,18 @@ export default function MarketChart({
   return (
     <div className="tp-chart-stage">
       <div ref={containerRef} className="market-chart" aria-label={symbol + " " + timeframe + " candlestick chart"} />
+      <div className="tp-signal-controls">
+        <span className="tp-signal-method">SMA 5 / 12 · HISTORICAL</span>
+        <button
+          type="button"
+          className={"tp-signal-toggle" + (showSignals ? " active" : "")}
+          aria-pressed={showSignals}
+          aria-label="Toggle illustrative moving average crossover markers"
+          onClick={() => setShowSignals((enabled) => !enabled)}
+        >
+          {showSignals ? "Signals on" : "Signals off"}
+        </button>
+      </div>
       <div className={"tp-stream-state tp-stream-state-" + streamStatus} role="status" aria-live="polite">
         <span className="tp-stream-led" aria-hidden="true" />
         {streamStatus === "live" ? "LIVE CANDLE UPDATES" : streamStatus === "connecting" ? "CONNECTING TO STREAM" : "REST FALLBACK · 60S"}
