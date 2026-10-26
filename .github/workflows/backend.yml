@@ -1,0 +1,38 @@
+name: Backend quality checks
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # Used only by Prisma client generation; CI unit tests do not connect to a DB.
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/trading_pulse
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Check TypeScript
+        run: npm run typecheck
+      - name: Test candle processing
+        run: npm test
