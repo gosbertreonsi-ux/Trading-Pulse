@@ -59,18 +59,20 @@ async function start(): Promise<void> {
     }
   }
 
+  let candleTimer: ReturnType<typeof setInterval> | undefined
+  let predictionTimer: ReturnType<typeof setInterval> | undefined
+  fastify.addHook('onClose', async () => {
+    if (candleTimer) clearInterval(candleTimer)
+    if (predictionTimer) clearInterval(predictionTimer)
+  })
+
   await fastify.listen({
     port: Number(process.env.PORT ?? 3000),
     host: process.env.HOST ?? '127.0.0.1'
   })
 
-  const candleTimer = setInterval(() => { void aggregateMarkets() }, 10_000)
-  const predictionTimer = setInterval(() => { void predictMarkets() }, 2_000)
-
-  fastify.addHook('onClose', async () => {
-    clearInterval(candleTimer)
-    clearInterval(predictionTimer)
-  })
+  candleTimer = setInterval(() => { void aggregateMarkets() }, 10_000)
+  predictionTimer = setInterval(() => { void predictMarkets() }, 2_000)
 
   // Do not wait for the first interval to check for previously completed candles.
   void aggregateMarkets()
