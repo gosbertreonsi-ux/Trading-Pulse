@@ -35,5 +35,7 @@ jobs:
         run: npm run lint
       - name: Type-check frontend
         run: npx tsc --noEmit
+      - name: Test chart crossover indicators
+        run: node --experimental-strip-types --test tests/chartSignals.test.mjs
       - name: Build frontend
         run: npm run build
