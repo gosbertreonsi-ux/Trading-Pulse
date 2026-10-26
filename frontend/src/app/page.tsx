@@ -101,8 +101,8 @@ export default function Home() {
                 ))}
               </div>
               <div className="tp-chart-legend">
-                <span><i className="tp-legend-buy" /> BUY candle</span>
-                <span><i className="tp-legend-sell" /> SELL candle</span>
+                <span><i className="tp-legend-buy" /> Bullish close</span>
+                <span><i className="tp-legend-sell" /> Bearish close</span>
               </div>
             </div>
             <div className="tp-chart-display">
@@ -112,7 +112,7 @@ export default function Home() {
             </div>
             <div className="tp-chart-footer">
               <span><span className="tp-dot" /> RESEARCH MODE <span className="tp-footer-sep">·</span> {snapshot?.candleCount ?? 0} bars loaded</span>
-              <span>Scroll to zoom <span className="tp-footer-sep">·</span> Drag to explore</span>
+              <span>BUY/SELL markers = past 5/12 SMA crossovers · Simulation only <span className="tp-footer-sep">·</span> Scroll to zoom · Drag to explore</span>
             </div>
           </section>
 

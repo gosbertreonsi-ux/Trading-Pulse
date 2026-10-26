@@ -534,3 +534,82 @@ textarea:focus-visible {
 .tp-stream-state-live .tp-stream-led { background: var(--positive); box-shadow: 0 0 7px var(--positive); }
 .tp-stream-state-fallback .tp-stream-led { background: var(--warning); box-shadow: none; }
 .tp-stream-state-connecting .tp-stream-led { background: var(--subtle); }
+
+
+/* Market chart art direction: subtle global backdrop under REAL candles. */
+.tp-chart-stage {
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse at 70% 12%, rgba(0, 174, 150, .09), transparent 48%),
+    radial-gradient(ellipse at 15% 92%, rgba(79, 39, 102, .10), transparent 50%),
+    #07121d;
+  overflow: hidden;
+}
+.tp-chart-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url("/market-world.svg");
+  background-size: cover;
+  background-position: center;
+  opacity: .77;
+}
+.tp-chart-stage .market-chart {
+  position: relative;
+  z-index: 1;
+}
+.tp-chart-stage .tp-stream-state,
+.tp-chart-stage .tp-chart-state {
+  z-index: 4;
+}
+.tp-signal-controls {
+  position: absolute;
+  z-index: 3;
+  top: 14px;
+  right: 68px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+.tp-signal-method {
+  border: 1px solid rgba(73, 211, 179, .14);
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: rgba(7, 19, 30, .82);
+  color: #a7c8c6;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .1em;
+}
+.tp-signal-toggle {
+  pointer-events: auto;
+  border-radius: 6px;
+  border: 1px solid rgba(97, 121, 140, .4);
+  background: rgba(6, 15, 25, .94);
+  padding: 7px 11px;
+  color: #a6b7c5;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .025em;
+}
+.tp-signal-toggle.active {
+  border-color: rgba(0, 238, 176, .53);
+  color: #09efac;
+}
+.tp-signal-toggle:hover { border-color: #71d3bc; }
+:root[data-theme="light"] .tp-chart-stage {
+  background: radial-gradient(ellipse at 60% 15%, rgba(20, 130, 155, .06), transparent 65%), #f6fafb;
+}
+:root[data-theme="light"] .tp-chart-stage::before { opacity: .15; }
+:root[data-theme="light"] .tp-signal-method { background: rgba(248, 251, 251, .92); color: #496b78; border-color: rgba(24, 83, 95, .22); }
+:root[data-theme="light"] .tp-signal-toggle { background: #f4f8f9; color: #476774; border-color: #b8cbd0; }
+:root[data-theme="light"] .tp-signal-toggle.active { color: #087c68; border-color: #149980; }
+@media (max-width: 580px) {
+  .tp-signal-controls { top: 38px; right: 18px; gap: 5px; }
+  .tp-signal-method { font-size: 8px; }
+}

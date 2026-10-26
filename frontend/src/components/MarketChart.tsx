@@ -5,10 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
+  LineSeries,
+  LineStyle,
+  createSeriesMarkers,
   type IChartApi,
   type CandlestickData,
   type Time,
 } from "lightweight-charts";
+import { movingAverageLine, movingAverageMarkers } from "@/lib/chartSignals";
 
 export type MarketSnapshot = {
   price: number;
@@ -151,6 +155,14 @@ export default function MarketChart({
   const chartRef = useRef<IChartApi | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
   const [streamStatus, setStreamStatus] = useState<"connecting" | "live" | "fallback">("connecting");
+  const [showSignals, setShowSignals] = useState(true);
+  const signalsEnabled = useRef(true);
+  const overlayUpdate = useRef<((enabled: boolean) => void) | null>(null);
+
+  useEffect(() => {
+    signalsEnabled.current = showSignals;
+    overlayUpdate.current?.(showSignals);
+  }, [showSignals]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -169,7 +181,7 @@ export default function MarketChart({
       width: container.clientWidth,
       height: container.clientHeight || 600,
       layout: {
-        background: { color: variable("--surface", "#0d121c") },
+        background: { color: "rgba(0, 0, 0, 0)" },
         textColor: variable("--muted", "#9aaac0"),
         attributionLogo: false,
       },
@@ -181,17 +193,17 @@ export default function MarketChart({
         borderColor: "rgba(151,169,196,0.14)",
         autoScale: true,
         scaleMargins: {
-          top: 0.08,
-          bottom: 0.08,
+          top: 0.20,
+          bottom: 0.16,
         },
       },
       timeScale: {
         borderColor: "rgba(151,169,196,0.14)",
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 5,
-        barSpacing: 5,
-        minBarSpacing: 2,
+        rightOffset: 9,
+        barSpacing: 9,
+        minBarSpacing: 3,
       },
       crosshair: {
         vertLine: {
@@ -219,20 +231,48 @@ export default function MarketChart({
     chartRef.current = chart;
 
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#31dfac",
-      downColor: "#fb6877",
+      upColor: "#08edae",
+      downColor: "#ff4768",
       borderVisible: false,
-      wickUpColor: "#31dfac",
-      wickDownColor: "#fb6877",
+      wickUpColor: "#08edae",
+      wickDownColor: "#ff4768",
       wickVisible: true,
       priceLineVisible: true,
     });
+
+    // All overlays are derived from historical completed candles, never
+    // generated prices. BUY/SELL labels mark past SMA crossovers only.
+    const fastLine = chart.addSeries(LineSeries, {
+      color: "#6dddd2",
+      lineWidth: 2,
+      lineStyle: LineStyle.Dashed,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    const slowLine = chart.addSeries(LineSeries, {
+      color: "#a987e5",
+      lineWidth: 1,
+      lineStyle: LineStyle.Dotted,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    const markerPlugin = createSeriesMarkers(series, []);
+    let latestCandles: CandlestickData<Time>[] = [];
+
+    const updateOverlay = (enabled: boolean) => {
+      markerPlugin.setMarkers(enabled ? movingAverageMarkers(latestCandles) : []);
+      fastLine.setData(enabled ? movingAverageLine(latestCandles, 5) : []);
+      slowLine.setData(enabled ? movingAverageLine(latestCandles, 12) : []);
+    };
+    overlayUpdate.current = updateOverlay;
 
     const applyTheme = () => {
       const light = document.documentElement.dataset.theme === "light";
       chart.applyOptions({
         layout: {
-          background: { color: variable("--surface", light ? "#ffffff" : "#0d121c") },
+          background: { color: "rgba(0, 0, 0, 0)" },
           textColor: variable("--muted", "#9aaac0"),
         },
         grid: {
@@ -241,11 +281,13 @@ export default function MarketChart({
         },
       });
       series.applyOptions({
-        upColor: light ? "#078b65" : "#31dfac",
-        wickUpColor: light ? "#078b65" : "#31dfac",
-        downColor: light ? "#d83f58" : "#fb6877",
-        wickDownColor: light ? "#d83f58" : "#fb6877",
+        upColor: light ? "#078b65" : "#08edae",
+        wickUpColor: light ? "#078b65" : "#08edae",
+        downColor: light ? "#d83f58" : "#ff4768",
+        wickDownColor: light ? "#d83f58" : "#ff4768",
       });
+      fastLine.applyOptions({ color: light ? "#087c79" : "#6dddd2" });
+      slowLine.applyOptions({ color: light ? "#7153a7" : "#a987e5" });
     };
     applyTheme();
     const themeObserver = new MutationObserver(applyTheme);
@@ -287,6 +329,8 @@ export default function MarketChart({
         const candles = groupCandles(rawCandles, timeframe);
 
         if (candles.length === 0) {
+          latestCandles = [];
+          updateOverlay(false);
           series.setData([]);
           setStatus("empty");
           onSnapshot?.(null);
@@ -294,6 +338,8 @@ export default function MarketChart({
         }
 
         series.setData(candles);
+        latestCandles = candles;
+        updateOverlay(signalsEnabled.current);
         setStatus("ready");
         const first = candles[0];
         const last = candles[candles.length - 1];
@@ -371,6 +417,7 @@ export default function MarketChart({
       stream?.close();
       resizeObserver.disconnect();
       themeObserver.disconnect();
+      overlayUpdate.current = null;
       chart.remove();
       chartRef.current = null;
     };
@@ -379,6 +426,18 @@ export default function MarketChart({
   return (
     <div className="tp-chart-stage">
       <div ref={containerRef} className="market-chart" aria-label={symbol + " " + timeframe + " candlestick chart"} />
+      <div className="tp-signal-controls">
+        <span className="tp-signal-method">SMA 5 / 12 · HISTORICAL</span>
+        <button
+          type="button"
+          className={"tp-signal-toggle" + (showSignals ? " active" : "")}
+          aria-pressed={showSignals}
+          aria-label="Toggle illustrative moving average crossover markers"
+          onClick={() => setShowSignals((enabled) => !enabled)}
+        >
+          {showSignals ? "Signals on" : "Signals off"}
+        </button>
+      </div>
       <div className={"tp-stream-state tp-stream-state-" + streamStatus} role="status" aria-live="polite">
         <span className="tp-stream-led" aria-hidden="true" />
         {streamStatus === "live" ? "LIVE CANDLE UPDATES" : streamStatus === "connecting" ? "CONNECTING TO STREAM" : "REST FALLBACK · 60S"}
