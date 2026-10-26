@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 type StudioMode = "manual" | "auto";
 
-export const runtime = "nodejs";
-
 export async function POST(request: NextRequest) {
   // There is intentionally no public Studio endpoint until authenticated sessions are implemented.
   if (process.env.NODE_ENV === "production") {
