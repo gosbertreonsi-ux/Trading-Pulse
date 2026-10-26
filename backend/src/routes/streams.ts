@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify'
-import type { WebSocket } from 'ws'
 
 type StreamEvent = 'ALERT' | 'CANDLE'
-type ClientSocket = { socket: WebSocket; clientId: string }
+type ClientSocket = {
+  socket: { readyState: number; send(message: string): void }
+  clientId: string
+}
 
 const activeSockets = new Set<ClientSocket>()
 
