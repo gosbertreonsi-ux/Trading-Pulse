@@ -1,238 +1,152 @@
-
 "use client";
 
-import { useMemo, useState } from "react";
-import MarketChart from "@/components/MarketChart";
+import Link from "next/link";
+import { useCallback, useMemo, useState } from "react";
+import AppShell from "@/components/AppShell";
+import MarketChart, { type MarketSnapshot } from "@/components/MarketChart";
 
 const markets = [
-  { symbol: "BTC", name: "Bitcoin", price: "67,482.30", change: "+2.84%", up: true },
-  { symbol: "ETH", name: "Ethereum", price: "3,521.86", change: "+1.62%", up: true },
-  { symbol: "SOL", name: "Solana", price: "182.47", change: "-0.74%", up: false },
-  { symbol: "BNB", name: "BNB", price: "598.24", change: "+0.91%", up: true },
-  { symbol: "XRP", name: "XRP", price: "0.6241", change: "-1.21%", up: false },
+  { symbol: "BTCUSDT", ticker: "BTC", name: "Bitcoin", mark: "₿" },
+  { symbol: "ETHUSDT", ticker: "ETH", name: "Ethereum", mark: "◆" },
+  { symbol: "SOLUSDT", ticker: "SOL", name: "Solana", mark: "≋" },
 ];
 
 const timeframes = ["1m", "5m", "15m", "1H", "4H", "1D", "1W", "1M"];
 
+function formatPrice(value: number | undefined) {
+  if (value === undefined) return "—";
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: value < 1 ? 5 : 2,
+  }).format(value);
+}
+
 export default function Home() {
-  const [dark, setDark] = useState(true);
-  const [timeframe, setTimeframe] = useState("1D");
-  const [selectedMarket, setSelectedMarket] = useState("BTC");
+  const [selectedSymbol, setSelectedSymbol] = useState("BTCUSDT");
+  const [timeframe, setTimeframe] = useState("1m");
   const [search, setSearch] = useState("");
-  const [watchlistOpen, setWatchlistOpen] = useState(false);
+  const [snapshot, setSnapshot] = useState<MarketSnapshot | null>(null);
 
-  const selected = markets.find((market) => market.symbol === selectedMarket) ?? markets[0];
+  const selected = markets.find((market) => market.symbol === selectedSymbol) ?? markets[0];
+  const filtered = useMemo(() => markets.filter((market) =>
+    (market.ticker + " " + market.name + " " + market.symbol)
+      .toLowerCase().includes(search.trim().toLowerCase())
+  ), [search]);
 
-  const filteredMarkets = useMemo(() => {
-    const query = search.trim().toLowerCase();
+  const updateSnapshot = useCallback((value: MarketSnapshot | null) => setSnapshot(value), []);
+  const change = snapshot?.changePercent;
+  const changeText = change === undefined || change === null
+    ? "—"
+    : (change >= 0 ? "+" : "") + change.toFixed(2) + "%";
 
-    return markets.filter((market) =>
-      `${market.symbol} ${market.name} ${market.symbol}/USDT`
-        .toLowerCase()
-        .includes(query)
-    );
-  }, [search]);
-
-  const theme = dark
-    ? {
-        page: "bg-[#080b12] text-slate-100",
-        panel: "bg-[#0d121c] border-white/[0.08]",
-        muted: "text-slate-400",
-        subtle: "text-slate-500",
-        hover: "hover:bg-white/[0.06]",
-        input: "bg-[#080d15] border-white/10",
-      }
-    : {
-        page: "bg-[#f3f6fa] text-slate-900",
-        panel: "bg-white border-slate-200",
-        muted: "text-slate-500",
-        subtle: "text-slate-400",
-        hover: "hover:bg-slate-100",
-        input: "bg-slate-50 border-slate-200",
-      };
+  function chooseMarket(symbol: string) {
+    if (symbol === selectedSymbol) return;
+    setSelectedSymbol(symbol);
+    setSnapshot(null);
+  }
 
   return (
-    <main className={`flex h-dvh min-h-[500px] flex-col overflow-hidden ${theme.page}`}>
-      <header className={`flex min-h-[60px] shrink-0 items-center justify-between gap-3 border-b px-3 sm:px-5 ${theme.panel}`}>
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-400 text-lg font-black text-slate-950">
-            T
+    <AppShell>
+      <div className="tp-dashboard">
+        <div className="tp-page-intro">
+          <div>
+            <div className="tp-eyebrow"><span className="tp-kicker-line" /> TRADING PULSE / OVERVIEW</div>
+            <h1>Market command center<span className="tp-title-period">.</span></h1>
+            <p>Your window into market movement. Built for exploration, not execution.</p>
           </div>
+          <Link href="/studio" className="tp-primary-link"><span aria-hidden="true">✳</span> Open AI Studio <span aria-hidden="true">↗</span></Link>
+        </div>
 
-          <div className="min-w-0">
-            <div className="truncate text-sm font-bold sm:text-base">
-              Trading Pulse
-            </div>
-            <div className={`text-[10px] ${theme.muted}`}>
-              Market intelligence · Simulator
-            </div>
+        <div className="tp-metrics">
+          <div className="tp-metric tp-metric-featured">
+            <div className="tp-metric-heading"><span>TRACKING</span><span className="tp-small-pulse" /></div>
+            <div className="tp-metric-value">{selected.ticker}<span className="tp-metric-currency"> / USDT</span></div>
+            <div className="tp-metric-foot">Selected market · {selected.name}</div>
+          </div>
+          <div className="tp-metric">
+            <div className="tp-metric-heading"><span>LAST CANDLE CLOSE</span><span aria-hidden="true">↗</span></div>
+            <div className="tp-metric-value"> {snapshot ? "$" + formatPrice(snapshot.price) : "—"}</div>
+            <div className="tp-metric-foot">From stored simulated candle data</div>
+          </div>
+          <div className="tp-metric">
+            <div className="tp-metric-heading"><span>LOADED RANGE CHANGE</span><span aria-hidden="true">⌁</span></div>
+            <div className={"tp-metric-value " + (change !== undefined && change !== null ? (change >= 0 ? "tp-up" : "tp-down") : "")}>{changeText}</div>
+            <div className="tp-metric-foot">First open → latest close · not 24h</div>
+          </div>
+          <div className="tp-metric">
+            <div className="tp-metric-heading"><span>DATA STREAM</span><span className="tp-status-orb" /></div>
+            <div className="tp-metric-value tp-metric-smaller">SIMULATED</div>
+            <div className="tp-metric-foot">Charts refresh every 10 seconds</div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <label className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${theme.input}`}>
-            <span className={theme.muted}>⌕</span>
-            <input
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setWatchlistOpen(true);
-              }}
-              onFocus={() => setWatchlistOpen(true)}
-              placeholder="Search markets"
-              aria-label="Search markets"
-              className="w-24 min-w-0 bg-transparent text-xs outline-none sm:w-36"
-            />
-          </label>
-
-          <button
-            onClick={() => setDark((value) => !value)}
-            className={`rounded-lg border px-3 py-2 text-xs ${theme.input}`}
-            aria-label="Toggle theme"
-          >
-            {dark ? "☀" : "☾"}
-          </button>
-        </div>
-      </header>
-
-      <section className="flex min-h-0 flex-1 flex-col p-2 sm:p-3">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-1 pb-3">
-          <div className="flex items-center gap-3 sm:gap-5">
-            <div>
-              <div className={`text-[11px] ${theme.muted}`}>Selected market</div>
-              <h1 className="mt-0.5 text-lg font-bold sm:text-xl">
-                {selected.symbol}/USDT
-              </h1>
-              <div className={`text-[10px] ${theme.muted}`}>{selected.name}</div>
-            </div>
-
-            <div className="border-l border-white/10 pl-3 sm:pl-5">
-              <div className="text-base font-semibold sm:text-xl">
-                ${selected.price}
+        <div className="tp-trading-layout">
+          <section className="tp-chart-card" aria-label="Market candlestick chart">
+            <div className="tp-chart-card-header">
+              <div className="tp-pair-title">
+                <span className="tp-coin-icon" aria-hidden="true">{selected.mark}</span>
+                <div><h2>{selected.ticker}<span>/USDT</span></h2><p>{selected.name} · Historical OHLC</p></div>
               </div>
-              <div className={`mt-1 text-xs ${selected.up ? "text-emerald-400" : "text-rose-400"}`}>
-                {selected.change} <span className={theme.muted}>24h</span>
+              <div className="tp-market-price">
+                <strong>{snapshot ? "$" + formatPrice(snapshot.price) : "Awaiting data"}</strong>
+                <span className={change !== undefined && change !== null ? (change >= 0 ? "tp-up" : "tp-down") : ""}>{changeText} <span className="tp-price-sub">loaded range</span></span>
               </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="hidden items-center gap-1.5 text-[10px] text-amber-400 sm:flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-              SIMULATED DATA
-            </span>
-
-            <button
-              onClick={() => setWatchlistOpen((value) => !value)}
-              aria-expanded={watchlistOpen}
-              className={`rounded-lg border px-3 py-2 text-xs ${theme.input}`}
-            >
-              {watchlistOpen ? "Close markets ×" : "Markets ☰"}
-            </button>
-          </div>
-        </div>
-
-        <section className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border ${theme.panel}`}>
-          <div className={`flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-2 py-2 sm:px-3 ${theme.panel}`}>
-            <div className="flex max-w-full items-center gap-1 overflow-x-auto">
-              {timeframes.map((period) => (
-                <button
-                  key={period}
-                  onClick={() => setTimeframe(period)}
-                  aria-pressed={timeframe === period}
-                  className={`shrink-0 rounded-md px-3 py-2 text-xs font-medium transition ${
-                    timeframe === period
-                      ? "bg-cyan-400 text-slate-950"
-                      : `${theme.muted} ${theme.hover}`
-                  }`}
-                >
-                  {period}
-                </button>
-              ))}
+            <div className="tp-chart-toolbar">
+              <div className="tp-timeframe-strip" role="group" aria-label="Chart timeframe">
+                <span className="tp-toolbar-label">INTERVAL</span>
+                {timeframes.map((period) => (
+                  <button key={period} type="button" onClick={() => setTimeframe(period)}
+                    className={"tp-timeframe" + (timeframe === period ? " active" : "")} aria-pressed={timeframe === period}>{period}</button>
+                ))}
+              </div>
+              <div className="tp-chart-legend">
+                <span><i className="tp-legend-buy" /> BUY candle</span>
+                <span><i className="tp-legend-sell" /> SELL candle</span>
+              </div>
             </div>
+            <div className="tp-chart-display">
+              <div className="tp-chart-watermark" aria-hidden="true">TRADING<span>PULSE</span></div>
+              <MarketChart symbol={selectedSymbol} timeframe={timeframe} onSnapshot={updateSnapshot} />
+              <div className="tp-chart-display-corner" aria-hidden="true"><span>MARKET</span> / ANALYTICS</div>
+            </div>
+            <div className="tp-chart-footer">
+              <span><span className="tp-dot" /> RESEARCH MODE <span className="tp-footer-sep">·</span> {snapshot?.candleCount ?? 0} bars loaded</span>
+              <span>Scroll to zoom <span className="tp-footer-sep">·</span> Drag to explore</span>
+            </div>
+          </section>
 
-            <span className={`px-2 text-[10px] ${theme.subtle}`}>
-              OHLC · Candlesticks
-            </span>
-          </div>
-
-          <div className="relative min-h-0 flex-1">
-            <MarketChart
-              symbol={`${selected.symbol}USDT`}
-              timeframe={timeframe}
-            />
-
-            {watchlistOpen && (
-              <div className={`absolute right-2 top-2 z-20 w-72 max-w-[calc(100%-1rem)] overflow-hidden rounded-xl border shadow-2xl ${theme.panel}`}>
-                <div className={`flex items-center justify-between border-b p-3 ${theme.panel}`}>
-                  <div>
-                    <div className="text-sm font-semibold">Markets</div>
-                    <div className={`mt-1 text-[10px] ${theme.muted}`}>
-                      Select an asset to update the chart
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setWatchlistOpen(false);
-                      setSearch("");
-                    }}
-                    className={`rounded-md px-2 py-1 ${theme.muted}`}
-                    aria-label="Close markets"
-                  >
-                    ✕
+          <aside className="tp-market-side" aria-label="Market tools">
+            <div className="tp-watchlist tp-side-card">
+              <div className="tp-side-head"><div><span className="tp-eyebrow">YOUR MARKETS</span><h3>Watchlist</h3></div><span className="tp-count">03</span></div>
+              <label className="tp-search-wrap">
+                <span aria-hidden="true">⌕</span>
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assets…" aria-label="Search available markets" />
+                <span className="tp-search-shortcut">⌕</span>
+              </label>
+              <div className="tp-watchlist-items">
+                {filtered.map((market) => (
+                  <button type="button" className={"tp-watchlist-item" + (market.symbol === selectedSymbol ? " selected" : "")} key={market.symbol}
+                    onClick={() => chooseMarket(market.symbol)} aria-pressed={market.symbol === selectedSymbol}>
+                    <span className="tp-list-coin" aria-hidden="true">{market.mark}</span>
+                    <span className="tp-list-name"><strong>{market.ticker}</strong><small>{market.name}</small></span>
+                    <span className="tp-list-right"><strong>{market.symbol === selectedSymbol && snapshot ? "$" + formatPrice(snapshot.price) : "—"}</strong><small>{market.symbol === selectedSymbol ? "Selected" : "View chart"}</small></span>
                   </button>
-                </div>
-
-                <div className="max-h-[60vh] overflow-y-auto p-2">
-                  {filteredMarkets.map((market) => (
-                    <button
-                      key={market.symbol}
-                      onClick={() => {
-                        setSelectedMarket(market.symbol);
-                        setWatchlistOpen(false);
-                        setSearch("");
-                      }}
-                      className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left ${
-                        selectedMarket === market.symbol
-                          ? "bg-cyan-400/10"
-                          : theme.hover
-                      }`}
-                    >
-                      <div>
-                        <div className="text-sm font-semibold">
-                          {market.symbol}/USDT
-                        </div>
-                        <div className={`mt-1 text-[11px] ${theme.muted}`}>
-                          {market.name}
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <div className="text-xs font-medium">${market.price}</div>
-                        <div className={`mt-1 text-xs ${market.up ? "text-emerald-400" : "text-rose-400"}`}>
-                          {market.change}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-
-                  {filteredMarkets.length === 0 && (
-                    <p className={`p-5 text-center text-xs ${theme.muted}`}>
-                      No matching markets.
-                    </p>
-                  )}
-                </div>
+                ))}
+                {filtered.length === 0 && <p className="tp-list-empty">No matching markets.</p>}
               </div>
-            )}
-          </div>
-
-          <footer className={`flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-3 py-2 text-[10px] ${theme.muted}`}>
-            <span>Mouse wheel: zoom · Drag: pan</span>
-            <span>Development mode · No live trades</span>
-          </footer>
-        </section>
-      </section>
-    </main>
+              <p className="tp-disclaimer">Prices appear only when chart data is available. No fabricated quotes.</p>
+            </div>
+            <div className="tp-side-card tp-insight-card">
+              <div className="tp-side-head"><div><span className="tp-eyebrow">INTELLIGENCE</span><h3>Market notes</h3></div><span className="tp-spark">✳</span></div>
+              <div className="tp-insight-row"><span className="tp-insight-icon">⌁</span><div><strong>Readable market movement</strong><p>Green and red candles show open-to-close direction. They are not buy or sell recommendations.</p></div></div>
+              <div className="tp-insight-row"><span className="tp-insight-icon">↗</span><div><strong>Visual + engineering studio</strong><p>Describe an improvement, review generated code, then choose what to implement.</p></div></div>
+              <Link className="tp-studio-cta" href="/studio">Explore AI Studio <span aria-hidden="true">↗</span></Link>
+            </div>
+          </aside>
+        </div>
+        <p className="tp-bottom-note">Trading Pulse is a development simulator. Some source prices may be market references, but generated ticks and trades are simulated.</p>
+      </div>
+    </AppShell>
   );
 }
