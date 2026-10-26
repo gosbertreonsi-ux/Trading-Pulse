@@ -74,7 +74,11 @@ export async function GET(request: NextRequest) {
     if (heartbeat) clearInterval(heartbeat);
     request.signal.removeEventListener("abort", close);
     if (upstream && upstream.readyState !== WebSocket.CLOSED) {
-      upstream.close();
+      try {
+        upstream.close();
+      } catch {
+        // A socket can still be connecting when the browser leaves.
+      }
     }
     try {
       controllerRef?.close();
