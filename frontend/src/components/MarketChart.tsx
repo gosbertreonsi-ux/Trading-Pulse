@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -10,9 +10,17 @@ import {
   type Time,
 } from "lightweight-charts";
 
+export type MarketSnapshot = {
+  price: number;
+  changePercent: number | null;
+  candleCount: number;
+  lastUpdated: string;
+};
+
 type MarketChartProps = {
   symbol: string;
   timeframe: string;
+  onSnapshot?: (snapshot: MarketSnapshot | null) => void;
 };
 
 type ApiCandle = {
@@ -46,7 +54,7 @@ const INTERVAL_SECONDS: Record<string, number> = {
   "4H": 14400,
   "1D": 86400,
   "1W": 604800,
-  "1M": 2592000,
+  // Calendar months are handled separately in groupCandles.
 };
 
 function parseTimestamp(value: string | number | undefined): number | null {
@@ -107,7 +115,11 @@ function groupCandles(
   const grouped = new Map<number, ValidCandle>();
 
   for (const candle of valid) {
-    const bucket = Math.floor(candle.seconds / interval) * interval;
+    const bucket = timeframe === "1M"
+      ? Date.UTC(new Date(candle.seconds * 1000).getUTCFullYear(), new Date(candle.seconds * 1000).getUTCMonth(), 1) / 1000
+      : timeframe === "1W"
+        ? Math.floor((candle.seconds + 3 * 86400) / 604800) * 604800 - 3 * 86400
+        : Math.floor(candle.seconds / interval) * interval;
     const existing = grouped.get(bucket);
 
     if (!existing) {
@@ -133,25 +145,29 @@ function groupCandles(
 export default function MarketChart({
   symbol,
   timeframe,
+  onSnapshot,
 }: MarketChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
     let hasLoadedData = false;
-    let resizeObserver: ResizeObserver | undefined;
+    let fetching = false;
+    setStatus("loading");
+    onSnapshot?.(null);
+    const variable = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 
     const chart = createChart(container, {
       width: container.clientWidth,
       height: container.clientHeight || 600,
       layout: {
-        background: { color: "#0d121c" },
-        textColor: "#9aaac0",
+        background: { color: variable("--surface", "#0d121c") },
+        textColor: variable("--muted", "#9aaac0"),
         attributionLogo: false,
       },
       grid: {
@@ -200,25 +216,46 @@ export default function MarketChart({
     chartRef.current = chart;
 
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#36d6a0",
-      downColor: "#ff687d",
+      upColor: "#31dfac",
+      downColor: "#fb6877",
       borderVisible: false,
-      wickUpColor: "#36d6a0",
-      wickDownColor: "#ff687d",
+      wickUpColor: "#31dfac",
+      wickDownColor: "#fb6877",
       wickVisible: true,
       priceLineVisible: true,
     });
 
+    const applyTheme = () => {
+      const light = document.documentElement.dataset.theme === "light";
+      chart.applyOptions({
+        layout: {
+          background: { color: variable("--surface", light ? "#ffffff" : "#0d121c") },
+          textColor: variable("--muted", "#9aaac0"),
+        },
+        grid: {
+          vertLines: { color: variable("--chart-grid", "rgba(151,169,196,0.08)") },
+          horzLines: { color: variable("--chart-grid", "rgba(151,169,196,0.08)") },
+        },
+      });
+      series.applyOptions({
+        upColor: light ? "#078b65" : "#31dfac",
+        wickUpColor: light ? "#078b65" : "#31dfac",
+        downColor: light ? "#d83f58" : "#fb6877",
+        wickDownColor: light ? "#d83f58" : "#fb6877",
+      });
+    };
+    applyTheme();
+    const themeObserver = new MutationObserver(applyTheme);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
     const loadCandles = async () => {
+      if (fetching) return;
+      fetching = true;
       try {
         const previousRange = hasLoadedData
           ? chart.timeScale().getVisibleLogicalRange()
           : null;
 
-        const wasFollowingLatest =
-          previousRange !== null &&
-          previousRange !== undefined &&
-          chart.timeScale().getVisibleLogicalRange() !== null;
 
         const response = await fetch(
           `/api/charts?symbol=${encodeURIComponent(symbol)}&limit=500`,
@@ -243,25 +280,42 @@ export default function MarketChart({
 
         const candles = groupCandles(rawCandles, timeframe);
 
-        if (candles.length === 0) return;
+        if (candles.length === 0) {
+          series.setData([]);
+          setStatus("empty");
+          onSnapshot?.(null);
+          return;
+        }
 
         series.setData(candles);
+        setStatus("ready");
+        const first = candles[0];
+        const last = candles[candles.length - 1];
+        onSnapshot?.({
+          price: last.close,
+          changePercent: first.open > 0 ? ((last.close - first.open) / first.open) * 100 : null,
+          candleCount: candles.length,
+          lastUpdated: new Date(Number(last.time) * 1000).toISOString(),
+        });
 
         if (!hasLoadedData) {
           chart.timeScale().fitContent();
           hasLoadedData = true;
-        } else if (
-          previousRange &&
-          !wasFollowingLatest
-        ) {
+        } else if (previousRange) {
           chart.timeScale().setVisibleLogicalRange(previousRange);
         }
       } catch (error) {
+        if (!cancelled) {
+          setStatus("error");
+          onSnapshot?.(null);
+        }
         console.error("Unable to load market candles:", error);
+      } finally {
+        fetching = false;
       }
     };
 
-    resizeObserver = new ResizeObserver(() => {
+    const resizeObserver = new ResizeObserver(() => {
       if (!cancelled && container.clientWidth > 0) {
         chart.applyOptions({
           width: container.clientWidth,
@@ -273,24 +327,30 @@ export default function MarketChart({
     resizeObserver.observe(container);
 
     void loadCandles();
-    timer = setInterval(() => {
+    const timer = setInterval(() => {
       void loadCandles();
     }, 10000);
 
     return () => {
       cancelled = true;
-      if (timer) clearInterval(timer);
-      resizeObserver?.disconnect();
+      clearInterval(timer);
+      resizeObserver.disconnect();
+      themeObserver.disconnect();
       chart.remove();
       chartRef.current = null;
     };
-  }, [symbol, timeframe]);
+  }, [symbol, timeframe, onSnapshot]);
 
   return (
-    <div
-      ref={containerRef}
-      className="market-chart"
-      aria-label={`${symbol} ${timeframe} candlestick chart`}
-    />
+    <div className="tp-chart-stage">
+      <div ref={containerRef} className="market-chart" aria-label={symbol + " " + timeframe + " candlestick chart"} />
+      {status !== "ready" && (
+        <div className="tp-chart-state" role="status" aria-live="polite">
+          <span className="tp-chart-state-glyph" aria-hidden="true">⌁</span>
+          <strong>{status === "loading" ? "Connecting to market data…" : status === "empty" ? "Waiting for candles" : "Chart data unavailable"}</strong>
+          <span>{status === "loading" ? "Retrieving stored market candles" : status === "empty" ? "Start the simulator and wait for a completed one-minute candle." : "Check the backend, Redis, database and chart API."}</span>
+        </div>
+      )}
+    </div>
   );
 }
