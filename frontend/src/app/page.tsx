@@ -1,539 +1,238 @@
+
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import MarketChart from "@/components/MarketChart";
 
 const markets = [
   { symbol: "BTC", name: "Bitcoin", price: "67,482.30", change: "+2.84%", up: true },
   { symbol: "ETH", name: "Ethereum", price: "3,521.86", change: "+1.62%", up: true },
   { symbol: "SOL", name: "Solana", price: "182.47", change: "-0.74%", up: false },
+  { symbol: "BNB", name: "BNB", price: "598.24", change: "+0.91%", up: true },
+  { symbol: "XRP", name: "XRP", price: "0.6241", change: "-1.21%", up: false },
 ];
 
-const watchlist = [
-  { symbol: "BTC/USDT", price: "67,482.30", change: "+2.84%", up: true },
-  { symbol: "ETH/USDT", price: "3,521.86", change: "+1.62%", up: true },
-  { symbol: "SOL/USDT", price: "182.47", change: "-0.74%", up: false },
-  { symbol: "BNB/USDT", price: "598.24", change: "+0.91%", up: true },
-  { symbol: "XRP/USDT", price: "0.6241", change: "-1.21%", up: false },
-];
-
-const navItems = [
-  { icon: "◫", label: "Overview" },
-  { icon: "⌁", label: "Markets" },
-  { icon: "▥", label: "Charts" },
-  { icon: "⇄", label: "Trade" },
-  { icon: "◷", label: "History" },
-];
+const timeframes = ["1m", "5m", "15m", "1H", "4H", "1D", "1W", "1M"];
 
 export default function Home() {
   const [dark, setDark] = useState(true);
-  const [activeNav, setActiveNav] = useState("Overview");
   const [timeframe, setTimeframe] = useState("1D");
-  const [selectedMarket, setSelectedMarket] = useState("BTC/USDT");
+  const [selectedMarket, setSelectedMarket] = useState("BTC");
   const [search, setSearch] = useState("");
+  const [watchlistOpen, setWatchlistOpen] = useState(false);
+
+  const selected = markets.find((market) => market.symbol === selectedMarket) ?? markets[0];
+
+  const filteredMarkets = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return markets.filter((market) =>
+      `${market.symbol} ${market.name} ${market.symbol}/USDT`
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [search]);
 
   const theme = dark
     ? {
-        page: "bg-[#090d14] text-slate-100",
-        panel: "bg-[#101722] border-white/[0.07]",
+        page: "bg-[#080b12] text-slate-100",
+        panel: "bg-[#0d121c] border-white/[0.08]",
         muted: "text-slate-400",
         subtle: "text-slate-500",
-        hover: "hover:bg-white/[0.05]",
-        line: "border-white/[0.07]",
-        input: "bg-[#0b111b] border-white/10",
+        hover: "hover:bg-white/[0.06]",
+        input: "bg-[#080d15] border-white/10",
       }
     : {
-        page: "bg-[#f4f6fa] text-slate-900",
+        page: "bg-[#f3f6fa] text-slate-900",
         panel: "bg-white border-slate-200",
         muted: "text-slate-500",
         subtle: "text-slate-400",
         hover: "hover:bg-slate-100",
-        line: "border-slate-200",
         input: "bg-slate-50 border-slate-200",
       };
 
-  const filteredWatchlist = watchlist.filter((item) =>
-    item.symbol.toLowerCase().includes(search.toLowerCase())
-  );
-
   return (
-    <main className={`min-h-screen ${theme.page}`}>
-      <div className="flex min-h-screen">
-        <aside
-          className={`hidden w-60 shrink-0 border-r ${theme.line} px-5 py-6 lg:flex lg:flex-col`}
-        >
-          <div className="mb-10 flex items-center gap-3 px-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-400 text-xl font-black text-slate-950">
-              T
+    <main className={`flex h-dvh min-h-[500px] flex-col overflow-hidden ${theme.page}`}>
+      <header className={`flex min-h-[60px] shrink-0 items-center justify-between gap-3 border-b px-3 sm:px-5 ${theme.panel}`}>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-400 text-lg font-black text-slate-950">
+            T
+          </div>
+
+          <div className="min-w-0">
+            <div className="truncate text-sm font-bold sm:text-base">
+              Trading Pulse
             </div>
-            <div>
-              <div className="text-lg font-bold tracking-tight">
-                Trading Pulse
-              </div>
-              <div className={`text-xs ${theme.muted}`}>
-                Market intelligence
-              </div>
+            <div className={`text-[10px] ${theme.muted}`}>
+              Market intelligence · Simulator
             </div>
           </div>
+        </div>
 
-          <div
-            className={`mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.2em] ${theme.subtle}`}
-          >
-            Workspace
-          </div>
-
-          <nav className="space-y-1">
-            {navItems.map((item) => (
-              <button
-                key={item.label}
-                onClick={() => setActiveNav(item.label)}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition ${
-                  activeNav === item.label
-                    ? "bg-cyan-400/10 font-semibold text-cyan-400"
-                    : `${theme.muted} ${theme.hover}`
-                }`}
-              >
-                <span className="w-5 text-center text-lg">{item.icon}</span>
-                {item.label}
-
-                {item.label === "Trade" && (
-                  <span className="ml-auto rounded-md bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-500">
-                    DEMO
-                  </span>
-                )}
-              </button>
-            ))}
-          </nav>
-
-          <div
-            className={`mb-3 mt-9 px-3 text-[10px] font-bold uppercase tracking-[0.2em] ${theme.subtle}`}
-          >
-            Personal
-          </div>
+        <div className="flex items-center gap-2">
+          <label className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${theme.input}`}>
+            <span className={theme.muted}>⌕</span>
+            <input
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setWatchlistOpen(true);
+              }}
+              onFocus={() => setWatchlistOpen(true)}
+              placeholder="Search markets"
+              aria-label="Search markets"
+              className="w-24 min-w-0 bg-transparent text-xs outline-none sm:w-36"
+            />
+          </label>
 
           <button
-            onClick={() => setActiveNav("Alerts")}
-            className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm ${theme.muted} ${theme.hover}`}
+            onClick={() => setDark((value) => !value)}
+            className={`rounded-lg border px-3 py-2 text-xs ${theme.input}`}
+            aria-label="Toggle theme"
           >
-            <span className="w-5 text-center text-lg">♧</span>
-            Alerts
+            {dark ? "☀" : "☾"}
           </button>
+        </div>
+      </header>
 
-          <button
-            onClick={() => setActiveNav("Settings")}
-            className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm ${theme.muted} ${theme.hover}`}
-          >
-            <span className="w-5 text-center text-lg">⚙</span>
-            Settings
-          </button>
-
-          <div className={`mt-auto rounded-2xl border ${theme.line} p-4`}>
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-              <span className="h-2 w-2 rounded-full bg-amber-400" />
-              Simulator mode
-            </div>
-            <p className={`text-xs leading-5 ${theme.muted}`}>
-              Prices and analytics are illustrative. Exchange data is not
-              connected yet.
-            </p>
-          </div>
-        </aside>
-
-        <section className="min-w-0 flex-1">
-          <header
-            className={`sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b ${theme.line} ${
-              dark ? "bg-[#090d14]/95" : "bg-white/95"
-            } px-5 py-4 backdrop-blur md:px-8`}
-          >
+      <section className="flex min-h-0 flex-1 flex-col p-2 sm:p-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-1 pb-3">
+          <div className="flex items-center gap-3 sm:gap-5">
             <div>
-              <div className={`text-xs ${theme.muted}`}>
-                Workspace / {activeNav}
-              </div>
-              <h1 className="mt-1 text-xl font-bold tracking-tight md:text-2xl">
-                {activeNav === "Overview" ? "Market overview" : activeNav}
+              <div className={`text-[11px] ${theme.muted}`}>Selected market</div>
+              <h1 className="mt-0.5 text-lg font-bold sm:text-xl">
+                {selected.symbol}/USDT
               </h1>
+              <div className={`text-[10px] ${theme.muted}`}>{selected.name}</div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div
-                className={`hidden items-center gap-2 rounded-xl border px-3 py-2 sm:flex ${theme.input}`}
-              >
-                <span className={theme.muted}>⌕</span>
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search markets..."
-                  className="w-32 bg-transparent text-sm outline-none md:w-44"
-                />
-                <span className={`text-[10px] ${theme.subtle}`}>⌘ K</span>
+            <div className="border-l border-white/10 pl-3 sm:pl-5">
+              <div className="text-base font-semibold sm:text-xl">
+                ${selected.price}
               </div>
-
-              <button
-                aria-label="Toggle light and dark theme"
-                onClick={() => setDark(!dark)}
-                className={`rounded-xl border px-3 py-2 text-sm ${theme.line} ${theme.hover}`}
-              >
-                {dark ? "☀ Light" : "☾ Dark"}
-              </button>
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-cyan-300 to-blue-600 text-sm font-bold text-slate-950">
-                TP
+              <div className={`mt-1 text-xs ${selected.up ? "text-emerald-400" : "text-rose-400"}`}>
+                {selected.change} <span className={theme.muted}>24h</span>
               </div>
             </div>
-          </header>
+          </div>
 
-          <div className="mx-auto max-w-[1600px] space-y-6 p-5 md:p-8">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  Your market at a glance
-                </h2>
-                <p className={`mt-1 text-sm ${theme.muted}`}>
-                  Monitor selected assets and market movement.
-                </p>
-              </div>
+          <div className="flex items-center gap-2">
+            <span className="hidden items-center gap-1.5 text-[10px] text-amber-400 sm:flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+              SIMULATED DATA
+            </span>
 
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/[0.07] px-3 py-1.5 text-xs font-medium text-amber-500">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                DEMO DATA · NOT LIVE
-              </span>
-            </div>
+            <button
+              onClick={() => setWatchlistOpen((value) => !value)}
+              aria-expanded={watchlistOpen}
+              className={`rounded-lg border px-3 py-2 text-xs ${theme.input}`}
+            >
+              {watchlistOpen ? "Close markets ×" : "Markets ☰"}
+            </button>
+          </div>
+        </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {markets.map((market) => (
+        <section className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border ${theme.panel}`}>
+          <div className={`flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-2 py-2 sm:px-3 ${theme.panel}`}>
+            <div className="flex max-w-full items-center gap-1 overflow-x-auto">
+              {timeframes.map((period) => (
                 <button
-                  key={market.symbol}
-                  onClick={() =>
-                    setSelectedMarket(`${market.symbol}/USDT`)
-                  }
-                  className={`rounded-2xl border p-5 text-left transition hover:-translate-y-0.5 ${
-                    theme.panel
-                  } ${
-                    selectedMarket === `${market.symbol}/USDT`
-                      ? "ring-1 ring-cyan-400/50"
-                      : ""
+                  key={period}
+                  onClick={() => setTimeframe(period)}
+                  aria-pressed={timeframe === period}
+                  className={`shrink-0 rounded-md px-3 py-2 text-xs font-medium transition ${
+                    timeframe === period
+                      ? "bg-cyan-400 text-slate-950"
+                      : `${theme.muted} ${theme.hover}`
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold ${
-                          market.symbol === "BTC"
-                            ? "bg-orange-400/15 text-orange-400"
-                            : market.symbol === "ETH"
-                              ? "bg-violet-400/15 text-violet-400"
-                              : "bg-cyan-400/15 text-cyan-400"
-                        }`}
-                      >
-                        {market.symbol.slice(0, 1)}
-                      </div>
-
-                      <div>
-                        <div className="font-semibold">
-                          {market.symbol}
-                          <span
-                            className={`ml-2 text-xs font-normal ${theme.muted}`}
-                          >
-                            / USDT
-                          </span>
-                        </div>
-                        <div className={`mt-0.5 text-xs ${theme.muted}`}>
-                          {market.name}
-                        </div>
-                      </div>
-                    </div>
-
-                    <span
-                      className={`text-lg ${
-                        market.up ? "text-emerald-400" : "text-rose-400"
-                      }`}
-                    >
-                      {market.up ? "↗" : "↘"}
-                    </span>
-                  </div>
-
-                  <div className="mt-6 flex items-end justify-between gap-2">
-                    <div className="text-2xl font-semibold tracking-tight">
-                      ${market.price}
-                    </div>
-                    <span
-                      className={`rounded-lg px-2 py-1 text-xs font-semibold ${
-                        market.up
-                          ? "bg-emerald-400/10 text-emerald-400"
-                          : "bg-rose-400/10 text-rose-400"
-                      }`}
-                    >
-                      {market.change}
-                    </span>
-                  </div>
-
-                  <div className={`mt-3 text-xs ${theme.subtle}`}>
-                    Illustrative price · 24h change
-                  </div>
+                  {period}
                 </button>
               ))}
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.8fr)_minmax(300px,1fr)]">
-              <section
-                className={`min-w-0 rounded-2xl border p-5 md:p-6 ${theme.panel}`}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-4">
+            <span className={`px-2 text-[10px] ${theme.subtle}`}>
+              OHLC · Candlesticks
+            </span>
+          </div>
+
+          <div className="relative min-h-0 flex-1">
+            <MarketChart
+              symbol={`${selected.symbol}USDT`}
+              timeframe={timeframe}
+            />
+
+            {watchlistOpen && (
+              <div className={`absolute right-2 top-2 z-20 w-72 max-w-[calc(100%-1rem)] overflow-hidden rounded-xl border shadow-2xl ${theme.panel}`}>
+                <div className={`flex items-center justify-between border-b p-3 ${theme.panel}`}>
                   <div>
-                    <div className={`text-sm ${theme.muted}`}>
-                      Price chart · {selectedMarket}
-                    </div>
-
-                    <div className="mt-2 flex flex-wrap items-center gap-3">
-                      <span className="text-3xl font-bold tracking-tight">
-                        $
-                        {selectedMarket.startsWith("ETH")
-                          ? "3,521.86"
-                          : selectedMarket.startsWith("SOL")
-                            ? "182.47"
-                            : "67,482.30"}
-                      </span>
-
-                      <span className="rounded-lg bg-emerald-400/10 px-2 py-1 text-xs font-semibold text-emerald-400">
-                        +2.84%
-                      </span>
-                    </div>
-
-                    <div className={`mt-1 text-xs ${theme.muted}`}>
-                      Illustrative chart · not connected to an exchange
+                    <div className="text-sm font-semibold">Markets</div>
+                    <div className={`mt-1 text-[10px] ${theme.muted}`}>
+                      Select an asset to update the chart
                     </div>
                   </div>
 
-                  <div
-                    className={`flex rounded-xl p-1 ${
-                      dark ? "bg-black/20" : "bg-slate-100"
-                    }`}
+                  <button
+                    onClick={() => {
+                      setWatchlistOpen(false);
+                      setSearch("");
+                    }}
+                    className={`rounded-md px-2 py-1 ${theme.muted}`}
+                    aria-label="Close markets"
                   >
-                    {["1H", "4H", "1D", "1W", "1M"].map((period) => (
-                      <button
-                        key={period}
-                        onClick={() => setTimeframe(period)}
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                          timeframe === period
-                            ? "bg-cyan-400 text-slate-950"
-                            : theme.muted
-                        }`}
-                      >
-                        {period}
-                      </button>
-                    ))}
-                  </div>
+                    ✕
+                  </button>
                 </div>
 
-                <div className="mt-8">
-                  <div className="mb-3 flex items-center justify-between text-xs">
-                    <span className={theme.muted}>Price movement</span>
-                    <span className="text-emerald-400">
-                      Candlestick chart
-                    </span>
-                  </div>
-
-                  <div className="overflow-hidden rounded-xl border border-white/[0.06]">
-                    <MarketChart
-                      symbol={selectedMarket.replace("/", "")}
-                      timeframe={timeframe}
-                    />
-                  </div>
-
-                  <p className={`mt-3 text-xs ${theme.subtle}`}>
-                    Simulated OHLC data · For development and interface testing
-                    only
-                  </p>
-                </div>
-
-                <div
-                  className={`mt-6 grid grid-cols-3 gap-3 border-t pt-5 ${theme.line}`}
-                >
-                  <div>
-                    <div className={`text-xs ${theme.muted}`}>24h high</div>
-                    <div className="mt-1 font-semibold">$68,120.00</div>
-                  </div>
-                  <div>
-                    <div className={`text-xs ${theme.muted}`}>24h low</div>
-                    <div className="mt-1 font-semibold">$65,904.20</div>
-                  </div>
-                  <div>
-                    <div className={`text-xs ${theme.muted}`}>24h volume</div>
-                    <div className="mt-1 font-semibold">$1.28B</div>
-                  </div>
-                </div>
-              </section>
-
-              <section className={`rounded-2xl border p-5 ${theme.panel}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <h3 className="font-semibold">Watchlist</h3>
-                    <p className={`mt-1 text-xs ${theme.muted}`}>
-                      Your selected markets
-                    </p>
-                  </div>
-
-                  <span
-                    className={`rounded-lg px-2 py-1 text-xs ${theme.muted} ${
-                      dark ? "bg-white/5" : "bg-slate-100"
-                    }`}
-                  >
-                    {filteredWatchlist.length} assets
-                  </span>
-                </div>
-
-                <div className="mt-5 space-y-1">
-                  {filteredWatchlist.map((item) => (
+                <div className="max-h-[60vh] overflow-y-auto p-2">
+                  {filteredMarkets.map((market) => (
                     <button
-                      key={item.symbol}
-                      onClick={() => setSelectedMarket(item.symbol)}
-                      className={`flex w-full items-center justify-between gap-3 rounded-xl px-2 py-3 text-left ${theme.hover}`}
+                      key={market.symbol}
+                      onClick={() => {
+                        setSelectedMarket(market.symbol);
+                        setWatchlistOpen(false);
+                        setSearch("");
+                      }}
+                      className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left ${
+                        selectedMarket === market.symbol
+                          ? "bg-cyan-400/10"
+                          : theme.hover
+                      }`}
                     >
                       <div>
                         <div className="text-sm font-semibold">
-                          {item.symbol}
+                          {market.symbol}/USDT
                         </div>
-                        <div className={`mt-1 text-xs ${theme.muted}`}>
-                          Demo market
+                        <div className={`mt-1 text-[11px] ${theme.muted}`}>
+                          {market.name}
                         </div>
                       </div>
 
                       <div className="text-right">
-                        <div className="text-sm font-medium">
-                          ${item.price}
-                        </div>
-                        <div
-                          className={`mt-1 text-xs ${
-                            item.up ? "text-emerald-400" : "text-rose-400"
-                          }`}
-                        >
-                          {item.change}
+                        <div className="text-xs font-medium">${market.price}</div>
+                        <div className={`mt-1 text-xs ${market.up ? "text-emerald-400" : "text-rose-400"}`}>
+                          {market.change}
                         </div>
                       </div>
                     </button>
                   ))}
 
-                  {filteredWatchlist.length === 0 && (
-                    <p
-                      className={`py-6 text-center text-sm ${theme.muted}`}
-                    >
+                  {filteredMarkets.length === 0 && (
+                    <p className={`p-5 text-center text-xs ${theme.muted}`}>
                       No matching markets.
                     </p>
                   )}
                 </div>
-
-                <div className={`mt-4 border-t pt-4 ${theme.line}`}>
-                  <p className={`text-xs leading-5 ${theme.muted}`}>
-                    Search markets from the top bar. Select an asset to
-                    highlight it and update the chart heading.
-                  </p>
-                </div>
-              </section>
-            </div>
-
-            <div className="grid gap-6 lg:grid-cols-2">
-              <section className={`rounded-2xl border p-5 ${theme.panel}`}>
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">Market signals</h3>
-                  <span className={`text-xs ${theme.muted}`}>
-                    Demo indicators
-                  </span>
-                </div>
-
-                <div
-                  className={`mt-4 flex items-start gap-3 rounded-xl border p-4 ${theme.line}`}
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-400">
-                    ↗
-                  </span>
-
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold">
-                      Positive sample momentum
-                    </div>
-                    <p className={`mt-1 text-xs leading-5 ${theme.muted}`}>
-                      The sample BTC series trends upward. This is a visual
-                      demonstration, not a live signal or financial advice.
-                    </p>
-                  </div>
-
-                  <span className="ml-auto shrink-0 rounded-lg bg-amber-400/10 px-2 py-1 text-[10px] text-amber-500">
-                    DEMO
-                  </span>
-                </div>
-
-                <div
-                  className={`mt-3 flex items-start gap-3 rounded-xl border p-4 ${theme.line}`}
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-400/10 text-violet-400">
-                    ◎
-                  </span>
-
-                  <div>
-                    <div className="text-sm font-semibold">
-                      Data connection pending
-                    </div>
-                    <p className={`mt-1 text-xs leading-5 ${theme.muted}`}>
-                      Exchange integration and authenticated backend data will
-                      be connected in a later step.
-                    </p>
-                  </div>
-                </div>
-              </section>
-
-              <section className={`rounded-2xl border p-5 ${theme.panel}`}>
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">Recent activity</h3>
-                  <span className={`text-xs ${theme.muted}`}>Local demo</span>
-                </div>
-
-                <div
-                  className={`mt-4 flex items-center gap-3 border-b py-4 ${theme.line}`}
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-400">
-                    ⌁
-                  </span>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium">
-                      Dashboard initialized
-                    </div>
-                    <div className={`mt-1 text-xs ${theme.muted}`}>
-                      Trading Pulse interface loaded
-                    </div>
-                  </div>
-
-                  <span className={`text-xs ${theme.subtle}`}>Demo</span>
-                </div>
-
-                <div className="flex items-center gap-3 py-4">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400/10 text-amber-500">
-                    ◷
-                  </span>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium">
-                      Backend integration pending
-                    </div>
-                    <div className={`mt-1 text-xs ${theme.muted}`}>
-                      No real trades or orders have been placed
-                    </div>
-                  </div>
-
-                  <span className={`text-xs ${theme.subtle}`}>Pending</span>
-                </div>
-              </section>
-            </div>
-
-            <footer
-              className={`flex flex-wrap items-center justify-between gap-2 border-t py-5 text-xs ${theme.line} ${theme.muted}`}
-            >
-              <span>Trading Pulse · Development build</span>
-              <span>Demo values only · No financial advice</span>
-            </footer>
+              </div>
+            )}
           </div>
+
+          <footer className={`flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-3 py-2 text-[10px] ${theme.muted}`}>
+            <span>Mouse wheel: zoom · Drag: pan</span>
+            <span>Development mode · No live trades</span>
+          </footer>
         </section>
-      </div>
+      </section>
     </main>
   );
 }

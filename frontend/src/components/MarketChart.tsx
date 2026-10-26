@@ -1,8 +1,14 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import type { CandlestickData, Time } from "lightweight-charts";
+import { useEffect, useRef } from "react";
+import {
+  createChart,
+  CandlestickSeries,
+  type IChartApi,
+  type CandlestickData,
+  type Time,
+} from "lightweight-charts";
 
 type MarketChartProps = {
   symbol: string;
@@ -10,21 +16,29 @@ type MarketChartProps = {
 };
 
 type ApiCandle = {
-  timestamp: string;
-  open: string | number;
-  high: string | number;
-  low: string | number;
-  close: string | number;
-  volume: string | number;
+  timestamp?: string | number;
+  time?: string | number;
+  open: number | string;
+  high: number | string;
+  low: number | string;
+  close: number | string;
+  volume?: number | string;
 };
 
 type ChartResponse = {
-  success: boolean;
-  data?: ApiCandle[];
-  error?: string;
+  candles?: ApiCandle[];
+  data?: ApiCandle[] | { candles?: ApiCandle[] };
 };
 
-const intervalSeconds: Record<string, number> = {
+type ValidCandle = {
+  seconds: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+};
+
+const INTERVAL_SECONDS: Record<string, number> = {
   "1m": 60,
   "5m": 300,
   "15m": 900,
@@ -35,249 +49,248 @@ const intervalSeconds: Record<string, number> = {
   "1M": 2592000,
 };
 
+function parseTimestamp(value: string | number | undefined): number | null {
+  if (value === undefined || value === null) return null;
+
+  let milliseconds: number;
+
+  if (typeof value === "number") {
+    milliseconds = value < 1e12 ? value * 1000 : value;
+  } else {
+    const numeric = Number(value);
+
+    if (value.trim() !== "" && Number.isFinite(numeric)) {
+      milliseconds = numeric < 1e12 ? numeric * 1000 : numeric;
+    } else {
+      milliseconds = Date.parse(value);
+    }
+  }
+
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) {
+    return null;
+  }
+
+  return Math.floor(milliseconds / 1000);
+}
+
+function toValidCandle(candle: ApiCandle): ValidCandle | null {
+  const seconds = parseTimestamp(candle.timestamp ?? candle.time);
+  const open = Number(candle.open);
+  const high = Number(candle.high);
+  const low = Number(candle.low);
+  const close = Number(candle.close);
+
+  if (
+    seconds === null ||
+    ![open, high, low, close].every(Number.isFinite) ||
+    Math.min(open, high, low, close) <= 0 ||
+    high < Math.max(open, close, low) ||
+    low > Math.min(open, close, high)
+  ) {
+    return null;
+  }
+
+  return { seconds, open, high, low, close };
+}
+
+function groupCandles(
+  input: ApiCandle[],
+  timeframe: string,
+): CandlestickData<Time>[] {
+  const interval = INTERVAL_SECONDS[timeframe] ?? 60;
+
+  const valid = input
+    .map(toValidCandle)
+    .filter((candle): candle is ValidCandle => candle !== null)
+    .sort((a, b) => a.seconds - b.seconds);
+
+  const grouped = new Map<number, ValidCandle>();
+
+  for (const candle of valid) {
+    const bucket = Math.floor(candle.seconds / interval) * interval;
+    const existing = grouped.get(bucket);
+
+    if (!existing) {
+      grouped.set(bucket, { ...candle, seconds: bucket });
+    } else {
+      existing.high = Math.max(existing.high, candle.high);
+      existing.low = Math.min(existing.low, candle.low);
+      existing.close = candle.close;
+    }
+  }
+
+  return Array.from(grouped.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([seconds, candle]) => ({
+      time: seconds as Time,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+    }));
+}
+
 export default function MarketChart({
   symbol,
   timeframe,
 }: MarketChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [status, setStatus] = useState("Loading market data…");
+  const chartRef = useRef<IChartApi | null>(null);
 
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
     let cancelled = false;
-    let chart:
-      | ReturnType<
-          typeof import("lightweight-charts")["createChart"]
-        >
-      | undefined;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    let hasLoadedData = false;
     let resizeObserver: ResizeObserver | undefined;
-    let refreshTimer: ReturnType<typeof setInterval> | undefined;
 
-    async function initializeChart() {
-      const container = containerRef.current;
-      if (!container) return;
+    const chart = createChart(container, {
+      width: container.clientWidth,
+      height: container.clientHeight || 600,
+      layout: {
+        background: { color: "#0d121c" },
+        textColor: "#9aaac0",
+        attributionLogo: false,
+      },
+      grid: {
+        vertLines: { color: "rgba(151,169,196,0.07)" },
+        horzLines: { color: "rgba(151,169,196,0.09)" },
+      },
+      rightPriceScale: {
+        borderColor: "rgba(151,169,196,0.14)",
+        autoScale: true,
+        scaleMargins: {
+          top: 0.08,
+          bottom: 0.08,
+        },
+      },
+      timeScale: {
+        borderColor: "rgba(151,169,196,0.14)",
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 5,
+        barSpacing: 5,
+        minBarSpacing: 2,
+      },
+      crosshair: {
+        vertLine: {
+          color: "rgba(151,169,196,0.45)",
+          labelBackgroundColor: "#27364b",
+        },
+        horzLine: {
+          color: "rgba(151,169,196,0.45)",
+          labelBackgroundColor: "#27364b",
+        },
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: true,
+      },
+    });
 
+    chartRef.current = chart;
+
+    const series = chart.addSeries(CandlestickSeries, {
+      upColor: "#36d6a0",
+      downColor: "#ff687d",
+      borderVisible: false,
+      wickUpColor: "#36d6a0",
+      wickDownColor: "#ff687d",
+      wickVisible: true,
+      priceLineVisible: true,
+    });
+
+    const loadCandles = async () => {
       try {
-        const {
-          createChart,
-          CandlestickSeries,
-          ColorType,
-        } = await import("lightweight-charts");
+        const previousRange = hasLoadedData
+          ? chart.timeScale().getVisibleLogicalRange()
+          : null;
 
-        if (cancelled || !containerRef.current) return;
+        const wasFollowingLatest =
+          previousRange !== null &&
+          previousRange !== undefined &&
+          chart.timeScale().getVisibleLogicalRange() !== null;
 
-        chart = createChart(container, {
-          width: container.clientWidth,
-          height: 420,
-          layout: {
-            background: {
-              type: ColorType.Solid,
-              color: "#0d121c",
-            },
-            textColor: "#8793a7",
-            attributionLogo: false,
-          },
-          grid: {
-            vertLines: {
-              color: "rgba(151,169,196,0.07)",
-            },
-            horzLines: {
-              color: "rgba(151,169,196,0.07)",
-            },
-          },
-          rightPriceScale: {
-            borderColor: "rgba(151,169,196,0.14)",
-          },
-          timeScale: {
-            borderColor: "rgba(151,169,196,0.14)",
-            timeVisible: true,
-            secondsVisible: false,
-          },
-          crosshair: {
-            vertLine: {
-              color: "rgba(71,227,208,0.45)",
-              labelBackgroundColor: "#168f85",
-            },
-            horzLine: {
-              color: "rgba(71,227,208,0.45)",
-              labelBackgroundColor: "#168f85",
-            },
-          },
-        });
+        const response = await fetch(
+          `/api/charts?symbol=${encodeURIComponent(symbol)}&limit=500`,
+          { cache: "no-store" },
+        );
 
-        const series = chart.addSeries(CandlestickSeries, {
-          upColor: "#36d6a0",
-          downColor: "#ff687d",
-          borderVisible: false,
-          wickUpColor: "#36d6a0",
-          wickDownColor: "#ff687d",
-        });
-
-        let hasLoadedData = false;
-        let requestInProgress = false;
-
-        async function loadCandles() {
-          if (requestInProgress || cancelled) return;
-          requestInProgress = true;
-
-          try {
-            const response = await fetch(
-              `/api/charts?symbol=${encodeURIComponent(symbol)}&limit=500`,
-              { cache: "no-store" }
-            );
-
-            const result = (await response.json()) as ChartResponse;
-
-            if (!response.ok || !result.success) {
-              throw new Error(result.error ?? "Unable to load candles");
-            }
-
-            const raw = result.data ?? [];
-
-            const valid = raw
-              .map((candle) => ({
-                seconds: Math.floor(
-                  new Date(candle.timestamp).getTime() / 1000
-                ),
-                open: Number(candle.open),
-                high: Number(candle.high),
-                low: Number(candle.low),
-                close: Number(candle.close),
-              }))
-              .filter(
-                (candle) =>
-                  Number.isFinite(candle.seconds) &&
-                  [candle.open, candle.high, candle.low, candle.close]
-                    .every(Number.isFinite) &&
-                  candle.open > 0 &&
-                  candle.high > 0 &&
-                  candle.low > 0 &&
-                  candle.close > 0 &&
-                  candle.high >= Math.max(candle.open, candle.close) &&
-                  candle.low <= Math.min(candle.open, candle.close)
-              )
-              .sort((a, b) => a.seconds - b.seconds);
-
-            const bucketSize = intervalSeconds[timeframe] ?? 60;
-            const grouped = new Map<
-              number,
-              { time: number; open: number; high: number; low: number; close: number }
-            >();
-
-            for (const candle of valid) {
-              const bucketTime =
-                Math.floor(candle.seconds / bucketSize) * bucketSize;
-              const existing = grouped.get(bucketTime);
-
-              if (!existing) {
-                grouped.set(bucketTime, {
-                  time: bucketTime,
-                  open: candle.open,
-                  high: candle.high,
-                  low: candle.low,
-                  close: candle.close,
-                });
-              } else {
-                existing.high = Math.max(existing.high, candle.high);
-                existing.low = Math.min(existing.low, candle.low);
-                existing.close = candle.close;
-              }
-            }
-
-            const candles: CandlestickData<Time>[] = Array.from(
-              grouped.values()
-            ).map((candle) => ({
-              time: candle.time as Time,
-              open: candle.open,
-              high: candle.high,
-              low: candle.low,
-              close: candle.close,
-            }));
-
-            if (cancelled) return;
-
-            if (candles.length > 0) {
-              series.setData(candles);
-
-              if (!hasLoadedData) {
-                chart?.timeScale().fitContent();
-                hasLoadedData = true;
-              }
-
-              setStatus(
-                `${symbol} · ${timeframe} · ${candles.length} candles from backend`
-              );
-            } else {
-              setStatus(
-                `No stored candles for ${symbol} yet. Waiting for backend data…`
-              );
-            }
-          } catch (error) {
-            if (!cancelled) {
-              console.error("[Trading Pulse] Candle request failed:", error);
-              setStatus(
-                error instanceof Error
-                  ? error.message
-                  : "Unable to load market data"
-              );
-            }
-          } finally {
-            requestInProgress = false;
-          }
+        if (!response.ok) {
+          throw new Error(`Chart request failed: ${response.status}`);
         }
 
-        await loadCandles();
+        const payload = (await response.json()) as ChartResponse;
 
         if (cancelled) return;
 
-        refreshTimer = setInterval(() => {
-          void loadCandles();
-        }, 10000);
+        const rawCandles = Array.isArray(payload.candles)
+          ? payload.candles
+          : Array.isArray(payload.data)
+            ? payload.data
+            : Array.isArray(payload.data?.candles)
+              ? payload.data.candles
+              : [];
 
-        resizeObserver = new ResizeObserver(() => {
-          if (containerRef.current && chart) {
-            chart.applyOptions({
-              width: containerRef.current.clientWidth,
-            });
-          }
-        });
+        const candles = groupCandles(rawCandles, timeframe);
 
-        resizeObserver.observe(container);
-      } catch (error) {
-        if (!cancelled) {
-          console.error(
-            "Trading Pulse chart initialization failed:",
-            error
-          );
-          setStatus("Chart initialization failed");
+        if (candles.length === 0) return;
+
+        series.setData(candles);
+
+        if (!hasLoadedData) {
+          chart.timeScale().fitContent();
+          hasLoadedData = true;
+        } else if (
+          previousRange &&
+          !wasFollowingLatest
+        ) {
+          chart.timeScale().setVisibleLogicalRange(previousRange);
         }
+      } catch (error) {
+        console.error("Unable to load market candles:", error);
       }
-    }
+    };
 
-    void initializeChart();
+    resizeObserver = new ResizeObserver(() => {
+      if (!cancelled && container.clientWidth > 0) {
+        chart.applyOptions({
+          width: container.clientWidth,
+          height: container.clientHeight || 600,
+        });
+      }
+    });
+
+    resizeObserver.observe(container);
+
+    void loadCandles();
+    timer = setInterval(() => {
+      void loadCandles();
+    }, 10000);
 
     return () => {
       cancelled = true;
-      if (refreshTimer) clearInterval(refreshTimer);
+      if (timer) clearInterval(timer);
       resizeObserver?.disconnect();
-      chart?.remove();
+      chart.remove();
+      chartRef.current = null;
     };
   }, [symbol, timeframe]);
 
   return (
-    <div className="w-full">
-      <div
-        ref={containerRef}
-        className="w-full overflow-hidden"
-        style={{ minHeight: 320 }}
-        aria-label={`${symbol} interactive candlestick chart`}
-      />
-      <p
-        className="mt-2 px-1 text-xs text-slate-400"
-        role="status"
-        aria-live="polite"
-      >
-        {status}
-      </p>
-    </div>
+    <div
+      ref={containerRef}
+      className="market-chart"
+      aria-label={`${symbol} ${timeframe} candlestick chart`}
+    />
   );
 }

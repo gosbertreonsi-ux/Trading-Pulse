@@ -1,65 +1,110 @@
+
 import axios from 'axios'
+import 'dotenv/config'
 
-const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'ADAUSDT']
-const API_URL = 'http://localhost:3000/api/v1/trades'
+const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
 
-// YOUR GENUINE PHASE 2 CRYPTOGRAPHIC SIGNATURE KEY
-const COMPLIANCE_TOKEN = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjbGllbnQiOiJ0cmFkaW5nLXB1bHNlLXNpbXVsYXRvci1hZ2VudCIsInJvbGUiOiJoaWdoX2ZyZXF1ZW5jeV9pbmdlc3Rpb25fd29ya2VyIiwiaWF0IjoxNzkyMzM1NzkzfQ.NrWVvF00PHAZhQI_OhL767aAM1zTqNImLCc_zOlgH_k'
+const API_URL =
+  process.env.TRADING_PULSE_API_URL ??
+  'http://localhost:3000'
 
-/**
- * Feeds your high-frequency loop with live international exchange prices
- * instead of unmarketable fake mock data numbers.
- */
-async function getLiveWorldwideTickerData(symbol: string) {
+const SIMULATOR_TOKEN = process.env.SIMULATOR_TOKEN
+
+if (!SIMULATOR_TOKEN) {
+  throw new Error(
+    'Missing SIMULATOR_TOKEN in backend .env'
+  )
+}
+
+const fallbackPrices: Record<string, number> = {
+  BTCUSDT: 65000,
+  ETHUSDT: 2600,
+  SOLUSDT: 150,
+}
+
+const lastPrices = { ...fallbackPrices }
+
+async function getMarketPrice(symbol: string): Promise<number> {
   try {
-    // Queries the global live price matrix directly from international API feeds
-    const response = await axios.get('https://binance.com' + symbol)
-    const livePrice = parseFloat(response.data.price)
-    
-    // Generate institutional order book volume metrics natively
-    const quantity = parseFloat((Math.random() * 1.5 + 0.1).toFixed(4))
-    const side = Math.random() > 0.5 ? 'BUY' : 'SELL'
+    const response = await axios.get(
+      'https://api.binance.com/api/v3/ticker/price',
+      {
+        params: { symbol },
+        timeout: 5000,
+      }
+    )
 
-    return { symbol, price: livePrice, quantity, side }
+    const price = Number(response.data.price)
+
+    if (!Number.isFinite(price) || price <= 0) {
+      throw new Error('Invalid price received')
+    }
+
+    lastPrices[symbol] = price
+    return price
   } catch (error) {
-    // Fallback security safety block: keeps your stream alive if a connection drops briefly
-    let fallbackPrice = 65000
-    if (symbol === 'ETHUSDT') fallbackPrice = 2600
-    if (symbol === 'SOLUSDT') fallbackPrice = 150
-    if (symbol === 'ADAUSDT') fallbackPrice = 0.35
-    
-    const variance = fallbackPrice * 0.002 * (Math.random() - 0.5)
-    return { 
-      symbol, 
-      price: parseFloat((fallbackPrice + variance).toFixed(4)), 
-      quantity: parseFloat((Math.random() * 2).toFixed(4)), 
-      side: Math.random() > 0.5 ? 'BUY' : 'SELL' 
+    // Development fallback only; this is not real market data.
+    const previous = lastPrices[symbol] ?? fallbackPrices[symbol]
+    const variation = previous * 0.0002 * (Math.random() - 0.5)
+    const simulated = Number((previous + variation).toFixed(8))
+
+    lastPrices[symbol] = simulated
+
+    console.warn(
+      `[SIMULATOR] ${symbol}: using simulated price; live feed unavailable`
+    )
+
+    return simulated
+  }
+}
+
+async function sendTick(symbol: string): Promise<void> {
+  const price = await getMarketPrice(symbol)
+
+  const payload = {
+    symbol,
+    price,
+    quantity: Number((Math.random() * 1.5 + 0.1).toFixed(4)),
+    side: Math.random() > 0.5 ? 'BUY' : 'SELL',
+  }
+
+  try {
+    const response = await axios.post(
+      `${API_URL}/api/v1/trades`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${SIMULATOR_TOKEN}`,
+        },
+        timeout: 5000,
+      }
+    )
+
+    console.log(
+      `[TICK ACCEPTED] ${symbol} price=${price} status=${response.status}`
+    )
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      console.error(
+        '[INGESTION ERROR]',
+        error.response?.status,
+        error.response?.data ?? error.message
+      )
+    } else {
+      console.error('[INGESTION ERROR]', error)
     }
   }
 }
 
 async function startSimulation() {
-  console.log('⚡ Upgrading Trading-Pulse to Worldwide Live Production Data Mode...')
-  console.log(`📡 Ingestion Gate target: ${API_URL}`)
+  console.log('[SIMULATOR] Starting market tick feed')
 
-  // High-frequency interval ticker loop firing every 500ms (2 ticks per second)
-  setInterval(async () => {
-    const randomSymbol = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]
-    
-    // Resolve true real-world asset dimensions asynchronously
-    const payload = await getLiveWorldwideTickerData(randomSymbol)
-
-    try {
-      const response = await axios.post(API_URL, payload, {
-        headers: {
-          Authorization: COMPLIANCE_TOKEN
-        }
-      })
-      console.log(`[WORLDWIDE FEED] Sent Live ${payload.symbol} @ $${payload.price} | Gateway Status: ${response.status}`)
-    } catch (error: any) {
-      console.error(`[SIMULATOR BLOCKED] Ingestion failed: ${error.response?.data?.error || error.message}`)
+  // Send one tick for each symbol every two seconds.
+  setInterval(() => {
+    for (const symbol of SYMBOLS) {
+      void sendTick(symbol)
     }
-  }, 500)
+  }, 2000)
 }
 
-startSimulation()
+void startSimulation()

@@ -18,7 +18,7 @@ const securityPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(helmet, { contentSecurityPolicy: true })
 
   await fastify.register(jwt, {
-    secret: process.env.JWT_SECRET || 'SUPER_SECURE_COMPLIANCE_GATEWAY_TOKEN_SECRET_KEY_123!'
+    secret: process.env.TRADING_PULSE_API_TOKEN || 'SUPER_SECURE_COMPLIANCE_GATEWAY_TOKEN_SECRET_KEY_123!'
   })
 
 fastify.decorate(

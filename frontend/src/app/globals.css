@@ -48,14 +48,9 @@
   box-sizing: border-box;
 }
 
-html {
-  min-height: 100%;
-  background: var(--background);
-  scroll-behavior: smooth;
-}
-
+html,
 body {
-  min-height: 100vh;
+  min-height: 100%;
   margin: 0;
   background: var(--background);
   color: var(--foreground);
@@ -63,6 +58,14 @@ body {
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
 }
 
 button,
@@ -78,7 +81,8 @@ button {
 
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
@@ -94,8 +98,8 @@ select:focus-visible {
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -103,9 +107,10 @@ select:focus-visible {
   background: var(--subtle);
 }
 
+/* Existing shared styles */
 .tp-panel {
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--surface);
 }
 
@@ -133,3 +138,120 @@ select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+
+/* Main trading workspace */
+.tp-main-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 6px;
+  gap: 6px;
+}
+
+/* Chart occupies the remaining available space */
+.tp-workspace {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  gap: 6px;
+}
+
+.tp-chart-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+/* Lightweight Charts container */
+.market-chart {
+  position: relative;
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+/* Small, functional chart toolbar */
+.tp-chart-toolbar {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 2px 8px;
+}
+
+/* Keep timeframe controls compact */
+.tp-timeframes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Desktop: use the viewport rather than leaving unused space */
+@media (min-width: 768px) {
+  .tp-main-content {
+    height: calc(100dvh - 56px);
+    overflow: hidden;
+  }
+
+  .tp-chart-panel {
+    padding: 4px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 767px) {
+  .tp-main-content {
+    min-height: calc(100dvh - 56px);
+    height: auto;
+    padding: 4px;
+  }
+
+  .tp-chart-panel {
+    min-height: 70dvh;
+    padding: 2px;
+  }
+
+  .market-chart {
+    min-height: 65dvh;
+  }
+
+  .tp-chart-toolbar {
+    gap: 4px;
+  }
+}
+
+
+
+
+.market-chart > div {
+  max-width: 100%;
+}
+
+
+.market-chart {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
