@@ -240,11 +240,39 @@ export default function MarketChart({
       priceLineVisible: true,
     });
 
+    // All overlays are derived from historical completed candles, never
+    // generated prices. BUY/SELL labels mark past SMA crossovers only.
+    const fastLine = chart.addSeries(LineSeries, {
+      color: "#6dddd2",
+      lineWidth: 2,
+      lineStyle: LineStyle.Dashed,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    const slowLine = chart.addSeries(LineSeries, {
+      color: "#a987e5",
+      lineWidth: 1,
+      lineStyle: LineStyle.Dotted,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    const markerPlugin = createSeriesMarkers(series, []);
+    let latestCandles: CandlestickData<Time>[] = [];
+
+    const updateOverlay = (enabled: boolean) => {
+      markerPlugin.setMarkers(enabled ? movingAverageMarkers(latestCandles) : []);
+      fastLine.setData(enabled ? movingAverageLine(latestCandles, 5) : []);
+      slowLine.setData(enabled ? movingAverageLine(latestCandles, 12) : []);
+    };
+    overlayUpdate.current = updateOverlay;
+
     const applyTheme = () => {
       const light = document.documentElement.dataset.theme === "light";
       chart.applyOptions({
         layout: {
-          background: { color: variable("--surface", light ? "#ffffff" : "#0d121c") },
+          background: { color: "rgba(0, 0, 0, 0)" },
           textColor: variable("--muted", "#9aaac0"),
         },
         grid: {
@@ -253,11 +281,13 @@ export default function MarketChart({
         },
       });
       series.applyOptions({
-        upColor: light ? "#078b65" : "#31dfac",
-        wickUpColor: light ? "#078b65" : "#31dfac",
-        downColor: light ? "#d83f58" : "#fb6877",
-        wickDownColor: light ? "#d83f58" : "#fb6877",
+        upColor: light ? "#078b65" : "#08edae",
+        wickUpColor: light ? "#078b65" : "#08edae",
+        downColor: light ? "#d83f58" : "#ff4768",
+        wickDownColor: light ? "#d83f58" : "#ff4768",
       });
+      fastLine.applyOptions({ color: light ? "#087c79" : "#6dddd2" });
+      slowLine.applyOptions({ color: light ? "#7153a7" : "#a987e5" });
     };
     applyTheme();
     const themeObserver = new MutationObserver(applyTheme);
