@@ -156,10 +156,7 @@ export default function MarketChart({
     if (!container) return;
 
     let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
     let hasLoadedData = false;
-    let resizeObserver: ResizeObserver | undefined;
-    let themeObserver: MutationObserver | undefined;
     let fetching = false;
     setStatus("loading");
     onSnapshot?.(null);
@@ -248,7 +245,7 @@ export default function MarketChart({
       });
     };
     applyTheme();
-    themeObserver = new MutationObserver(applyTheme);
+    const themeObserver = new MutationObserver(applyTheme);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
     const loadCandles = async () => {
@@ -318,7 +315,7 @@ export default function MarketChart({
       }
     };
 
-    resizeObserver = new ResizeObserver(() => {
+    const resizeObserver = new ResizeObserver(() => {
       if (!cancelled && container.clientWidth > 0) {
         chart.applyOptions({
           width: container.clientWidth,
@@ -330,15 +327,15 @@ export default function MarketChart({
     resizeObserver.observe(container);
 
     void loadCandles();
-    timer = setInterval(() => {
+    const timer = setInterval(() => {
       void loadCandles();
     }, 10000);
 
     return () => {
       cancelled = true;
-      if (timer) clearInterval(timer);
-      resizeObserver?.disconnect();
-      themeObserver?.disconnect();
+      clearInterval(timer);
+      resizeObserver.disconnect();
+      themeObserver.disconnect();
       chart.remove();
       chartRef.current = null;
     };
