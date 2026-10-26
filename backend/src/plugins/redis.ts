@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin'
-import { FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync } from 'fastify'
 import { createClient } from 'redis'
 
 declare module 'fastify' {
@@ -9,15 +9,11 @@ declare module 'fastify' {
 }
 
 const redisPlugin: FastifyPluginAsync = async (fastify) => {
-  // Initialize local Redis client (defaults to localhost:6379)
-  const client = createClient()
-
-  client.on('error', (err) => fastify.log.error('Redis Client Error', err))
+  const client = createClient({ url: process.env.REDIS_URL ?? 'redis://127.0.0.1:6379' })
+  client.on('error', (error) => fastify.log.error({ err: error }, 'Redis client error'))
 
   await client.connect()
-  fastify.log.info('⚡ Redis Cache Layer connected successfully')
-
-  // Decorate Fastify so we can call it via fastify.redis
+  fastify.log.info('Redis cache connected')
   fastify.decorate('redis', client as never)
 
   fastify.addHook('onClose', async (server) => {
