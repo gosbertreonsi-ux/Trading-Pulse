@@ -4,6 +4,7 @@
  * fewer at startup), never a fabricated 24-hour period.
  */
 export type WatchQuote = {
+  symbol: string;
   price: number;
   change: number | null;
   spark: number[];
@@ -39,6 +40,7 @@ export function fromMarketSnapshot(item: WatchSnapshotItem): WatchQuote | null {
   const spark = [...item.spark];
   if (spark[spark.length - 1] !== item.price) return null;
   return {
+    symbol: item.symbol,
     price: item.price,
     spark,
     change: spark.length >= 2 ? ((item.price - spark[0]) / spark[0]) * 100 : null,
@@ -53,10 +55,11 @@ export function applyWatchTick(
   const time = Date.parse(tick.timestamp);
   if (!ALLOWED.has(tick.symbol) || !Number.isFinite(time) ||
       !Number.isFinite(tick.price) || tick.price <= 0) return current;
-  if (current && time <= Date.parse(current.lastUpdated)) return current;
+  if (current && (current.symbol !== tick.symbol || time <= Date.parse(current.lastUpdated))) return current;
 
   const spark = [...(current?.spark ?? []), tick.price].slice(-LIMIT);
   return {
+    symbol: tick.symbol,
     price: tick.price,
     change: spark.length > 1 ? ((tick.price - spark[0]) / spark[0]) * 100 : null,
     spark,
