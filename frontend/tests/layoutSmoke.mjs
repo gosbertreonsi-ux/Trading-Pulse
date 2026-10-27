@@ -294,6 +294,74 @@ async function inspectLiquidity(viewport) {
   }
 }
 
+async function inspectPaper(viewport) {
+  const page = await browser.newPage({ viewport });
+  try {
+    const rows = [];
+    const fills = [];
+    await page.route("**/api/paper*", async route => {
+      const req = route.request();
+      const method = req.method();
+      let status = 200;
+      let payload;
+      const id = "11111111-1111-4111-8111-111111111111";
+      if (method === "POST") {
+        const body = req.postDataJSON();
+        if (body.side === "BUY") {
+          rows.push({ id, symbol: body.symbol, side: body.side, price: body.price,
+            quantity: body.quantity, remainingQuantity: body.quantity, status: "OPEN",
+            createdAt: "2026-10-27T16:00:00Z" });
+          payload = { success: true, order: rows[0], fills: [] };
+        } else {
+          rows[0].remainingQuantity -= body.quantity;
+          rows[0].status = "PARTIALLY_FILLED";
+          fills.push({ id: "22222222-2222-4222-8222-222222222222", symbol: body.symbol,
+            price: rows[0].price, quantity: body.quantity,
+            buyOrderId: rows[0].id, sellOrderId: "33333333-3333-4333-8333-333333333333",
+            executedAt: "2026-10-27T16:00:01Z" });
+          payload = { success: true, order: { ...body, status: "FILLED" }, fills };
+        }
+        status = 201;
+      } else if (method === "DELETE") {
+        rows.length = 0;
+        payload = { success: true };
+      } else {
+        payload = {
+          success: true, mode: "PAPER_IN_MEMORY", persistent: false, symbol: "BTCUSDT",
+          bids: rows.filter(order => order.side === "BUY"),
+          asks: [], recentOrders: rows, fills,
+        };
+      }
+      await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(payload) });
+    });
+    const response = await page.goto(origin + "/paper", { waitUntil: "domcontentloaded" });
+    assert.equal(response?.status(), 200);
+    await page.getByRole("heading", { name: "Paper order book." }).waitFor();
+    await page.getByText("TEST ORDERS ONLY", { exact: false }).waitFor();
+    await page.locator("#po-price").fill("100");
+    await page.locator("#po-quantity").fill("2");
+    await page.getByRole("button", { name: "Place simulated BUY order" }).click();
+    await page.locator(".po-book-side .po-row").filter({ hasText: "100.00" }).first().waitFor();
+    await page.getByRole("button", { name: "SELL", exact: true }).click();
+    await page.locator("#po-price").fill("99");
+    await page.locator("#po-quantity").fill("1");
+    await page.getByRole("button", { name: "Place simulated SELL order" }).click();
+    await page.getByText("1 simulated fill(s) recorded.", { exact: false }).waitFor();
+    assert.equal(await page.locator(".po-fill").count(), 1);
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByText("No active paper orders.").waitFor();
+    const geom = await page.evaluate(() => ({
+      width: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+    }));
+    assert.ok(geom.scrollWidth <= geom.width + 6, "Paper sandbox must fit viewport: " + JSON.stringify(geom));
+    await page.getByRole("button", { name: "Switch to light mode" }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.theme === "light");
+    const panel = await page.locator(".po-card").first().evaluate(x => getComputedStyle(x).backgroundColor);
+    assert.equal(panel, "rgb(255, 255, 255)");
+    console.log("PASS paper matching sandbox " + JSON.stringify({ viewport, geom, panel }));
+  } finally { await page.close(); }
+}
+
 async function inspectAlerts() {
   const page = await browser.newPage({ viewport: { width: 1390, height: 780 } });
   try {
@@ -349,6 +417,8 @@ try {
   await inspectHistoricalAnalytics({ width: 390, height: 844 });
   await inspectLiquidity({ width: 1390, height: 780 });
   await inspectLiquidity({ width: 390, height: 844 });
+  await inspectPaper({ width: 1390, height: 780 });
+  await inspectPaper({ width: 390, height: 844 });
 } finally {
   if (browser) await browser.close();
   app.kill("SIGTERM");
