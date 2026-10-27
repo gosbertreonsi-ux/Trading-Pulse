@@ -96,6 +96,26 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
       assert.equal(data.success, true)
       assert.equal(data.cached, true, 'Redis hot cache is reachable')
 
+      // The unfinished current-minute candle comes from tenant-scoped,
+      // durable trades before the worker finalizes any OHLCV rows.
+      const openResponse = await server.inject({
+        method: 'GET', url: '/api/v1/charts?symbol=BTCUSDT&limit=20',
+        headers: headers(viewer)
+      })
+      assert.equal(openResponse.statusCode, 200, openResponse.body)
+      const openCandle = (openResponse.json() as {
+        openCandle: null | { timestamp: string; close: number; volume: number; lastTickAt: string }
+      }).openCandle
+      assert.ok(openCandle, 'Current-minute preview is available immediately')
+      assert.equal(openCandle.close, point.price)
+      assert.ok(new Date(openCandle.lastTickAt).getTime() > 0)
+      const otherPreview = await server.inject({
+        method: 'GET', url: '/api/v1/charts?symbol=BTCUSDT&limit=20',
+        headers: headers(otherViewer)
+      })
+      assert.equal((otherPreview.json() as { openCandle: unknown }).openCandle, null,
+        'Current-minute preview never leaks across tenants')
+
       // Backdate only these isolated fixtures so the same CI run can test a
       // finished minute instead of needing a real-time minute-long sleep.
       await server.db.trade.update({
