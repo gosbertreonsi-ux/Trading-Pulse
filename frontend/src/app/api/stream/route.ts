@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
   let backend: URL;
   try {
-    backend = new URL(process.env.TRADING_PULSE_API_URL ?? "http://127.0.0.1:3000");
+    backend = new URL(process.env.TRADING_PULSE_API_URL ?? "http://127.0.0.1:3001");
     if (backend.protocol !== "http:" && backend.protocol !== "https:") {
       throw new Error("Unsupported backend protocol");
     }

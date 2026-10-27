@@ -585,3 +585,59 @@ textarea:focus-visible {
 .tp-metric-featured { background: linear-gradient(135deg, rgba(31, 184, 149, .13), var(--surface) 79%); }
 .tp-insight-card { background: linear-gradient(160deg, rgba(22, 122, 104, .10), var(--surface) 55%); }
 .tp-coin-icon { box-shadow: 0 0 20px rgba(220, 153, 50, .08); }
+
+
+/* Local development diagnostics: maintain the reference's black UI. */
+.tp-connection {
+  background: linear-gradient(155deg, rgba(8, 36, 32, .45), var(--surface) 62%);
+}
+.tp-connection-lamp {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+.tp-connection-lamp.online {
+  background: var(--positive);
+  box-shadow: 0 0 11px rgba(8, 237, 174, .38);
+}
+.tp-connection-main {
+  display: block;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+.tp-connection-description {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.65;
+  margin: 10px 0 0;
+}
+.tp-connection-help {
+  display: block;
+  font-size: 10px;
+  color: var(--subtle);
+  margin-top: 10px;
+}
+.tp-connection-bottom {
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  font-size: 10px;
+  color: var(--subtle);
+}
+.tp-connection-refresh {
+  background: var(--surface-elevated);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 9px;
+  font-size: 10px;
+  font-weight: 750;
+}
+.tp-connection-refresh:hover { border-color: var(--accent); }

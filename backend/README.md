@@ -12,7 +12,7 @@ Trading Pulse is a market-data analytics **simulator**. Its ticks may use market
 6. Run `npm run dev` for Fastify, and in a separate terminal run `npx tsx src/simulator.ts` for the simulated tick feed.
 7. Run `npm run typecheck` and `npm test` to review code quality and candle calculations.
 
-The API listens on port 3000. Set the Next.js server-side `TRADING_PULSE_VIEWER_JWT` to a **valid JWT** with the same tenant client claim as the simulator, not the signing secret. Keep the backend signing secret only on trusted servers. In production use a dedicated read-only viewer token and short-lived authentication.
+The API listens on port 3001 by default. Keep Next.js on port 3000; set `PORT=3001` and `TRADING_PULSE_API_URL=http://127.0.0.1:3001` in the backend environment. Set the Next.js server-side `TRADING_PULSE_VIEWER_JWT` to a **valid JWT** with the same tenant client claim as the simulator, not the signing secret. Keep the backend signing secret only on trusted servers. In production use a dedicated read-only viewer token and short-lived authentication.
 
 ### Security reminders
 
@@ -35,3 +35,19 @@ The API listens on port 3000. Set the Next.js server-side `TRADING_PULSE_VIEWER_
 Start PostgreSQL, Redis, Fastify and the simulator. Wait until the current UTC minute has finished and watch the backend log for completed candle changes. Then make an authenticated request to `GET /api/v1/charts?symbol=BTCUSDT` using your generated viewer JWT. Confirm candle timestamps, OHLC values and the simulator tenant. Use the same token with `GET /api/v1/trades?symbol=BTCUSDT` and confirm persisted ticks are visible.
 
 The automated tests cover UTC minute buckets, open/high/low/close/volume, invalid inputs, one persist, and unchanged candle idempotency. Browser visual checks, WebSocket handshake checks, and Redis outage simulations must also be run locally before merging.
+
+### Local chart readiness after a 503 error
+
+If the Next.js dashboard loads but `GET /api/charts` returns **503**, it usually means `TRADING_PULSE_VIEWER_JWT` is missing in `frontend/.env.local`. The black dashboard now includes a local data-connection check that categorizes missing/expired JWTs, unreachable Fastify, wrong ports, and an empty candle history. It never sends JWT values to the browser.
+
+In **Command Prompt** or **PowerShell**:
+1. Start PostgreSQL and Redis.
+2. Under `backend/`, set your **private** signing secret in `.env`. Set `PORT=3001` and `TRADING_PULSE_API_URL=http://127.0.0.1:3001`.
+3. Run `npx tsx src/generateToken.ts worker` and store the generated worker JWT as `SIMULATOR_TOKEN` in backend `.env`.
+4. Run `npx tsx src/generateToken.ts viewer` and store the **different** viewer JWT as `TRADING_PULSE_VIEWER_JWT` in `frontend/.env.local`.
+5. In `frontend/.env.local`, also set `TRADING_PULSE_API_URL=http://127.0.0.1:3001`.
+6. Start Fastify in one terminal with `npm run dev` from `backend/`, and the simulator in another with `npx tsx src/simulator.ts`.
+7. Start Next.js in another terminal with `npm run dev` from `frontend/`, then open its local URL (typically port 3000).
+8. Review the dashboard's **Data connection** panel. A `connected-empty` response is healthy but requires a completed UTC candle minute. Use **Check again** after the simulator starts.
+
+JWTs expire after 24 hours. Generate new ones as needed and **do not** paste them into issues, screenshots, or conversation logs. Existing `.env` files are *not* automatically overwritten by updating `.env.example`; change your local settings explicitly.
