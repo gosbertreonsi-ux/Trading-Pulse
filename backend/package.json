@@ -8,7 +8,7 @@
     "build": "tsc --noEmit",
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/services/candleMath.test.ts src/services/aggregator.test.ts src/services/historicalMetrics.test.ts src/services/liquidityModel.test.ts"
+    "test": "tsx --test src/services/candleMath.test.ts src/services/aggregator.test.ts src/services/historicalMetrics.test.ts src/services/liquidityModel.test.ts src/services/paperMatching.test.ts"
   },
   "keywords": [],
   "author": "",
