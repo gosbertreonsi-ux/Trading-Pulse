@@ -1,238 +1,267 @@
-
 "use client";
 
-import { useMemo, useState } from "react";
-import MarketChart from "@/components/MarketChart";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import AppShell from "@/components/AppShell";
+import MarketChart, { type MarketSnapshot } from "@/components/MarketChart";
+import MarketConnection from "@/components/MarketConnection";
+import { generateDemoCandles } from "@/lib/demoCandles";
 
-const markets = [
-  { symbol: "BTC", name: "Bitcoin", price: "67,482.30", change: "+2.84%", up: true },
-  { symbol: "ETH", name: "Ethereum", price: "3,521.86", change: "+1.62%", up: true },
-  { symbol: "SOL", name: "Solana", price: "182.47", change: "-0.74%", up: false },
-  { symbol: "BNB", name: "BNB", price: "598.24", change: "+0.91%", up: true },
-  { symbol: "XRP", name: "XRP", price: "0.6241", change: "-1.21%", up: false },
+type Market = { symbol: string; ticker: string; name: string; icon: string };
+type Quote = { price: number; change: number; spark: number[] };
+type Source = "demo" | "backend";
+
+const markets: Market[] = [
+  { symbol: "BTCUSDT", ticker: "BTC", name: "Bitcoin", icon: "₿" },
+  { symbol: "ETHUSDT", ticker: "ETH", name: "Ethereum", icon: "Ξ" },
+  { symbol: "SOLUSDT", ticker: "SOL", name: "Solana", icon: "◎" },
 ];
 
 const timeframes = ["1m", "5m", "15m", "1H", "4H", "1D", "1W", "1M"];
 
+function money(price: number | undefined): string {
+  if (price === undefined || !Number.isFinite(price)) return "—";
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: price < 1 ? 5 : 2,
+  }).format(price);
+}
+
+function percent(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return (value >= 0 ? "+" : "") + value.toFixed(2) + "%";
+}
+
+function demoQuotes(): Record<string, Quote> {
+  const result: Record<string, Quote> = {};
+  const now = Date.now();
+  for (const market of markets) {
+    const candles = generateDemoCandles(market.symbol, now, 60);
+    if (!candles.length) continue;
+    const first = candles[0];
+    const last = candles[candles.length - 1];
+    result[market.symbol] = {
+      price: last.close,
+      change: ((last.close - first.open) / first.open) * 100,
+      spark: candles.slice(-24).map(bar => bar.close),
+    };
+  }
+  return result;
+}
+
+function Sparkline({ points, rising }: { points?: number[]; rising: boolean }) {
+  if (!points || points.length < 2) return <span className="br-spark-placeholder" aria-hidden="true">—</span>;
+  const min = Math.min(...points);
+  const range = Math.max(...points) - min || 1;
+  const path = points.map((value, index) => {
+    const x = (index / (points.length - 1)) * 78;
+    const y = 28 - ((value - min) / range) * 22;
+    return (index ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
+  }).join(" ");
+  return (
+    <svg className={"br-spark" + (rising ? " up" : " down")} viewBox="0 0 78 34" aria-hidden="true" focusable="false">
+      <path d={path} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
 export default function Home() {
-  const [dark, setDark] = useState(true);
-  const [timeframe, setTimeframe] = useState("1D");
-  const [selectedMarket, setSelectedMarket] = useState("BTC");
+  const [selectedSymbol, setSelectedSymbol] = useState("BTCUSDT");
+  const [source, setSource] = useState<Source>(process.env.NODE_ENV === "development" ? "demo" : "backend");
+  const [timeframe, setTimeframe] = useState("1m");
   const [search, setSearch] = useState("");
-  const [watchlistOpen, setWatchlistOpen] = useState(false);
+  const [snapshot, setSnapshot] = useState<MarketSnapshot | null>(null);
+  const [quotes, setQuotes] = useState<Record<string, Quote>>({});
 
-  const selected = markets.find((market) => market.symbol === selectedMarket) ?? markets[0];
+  useEffect(() => {
+    if (source !== "demo") return;
+    // Keep browser-only synthetic quotes off the server render and never
+    // confuse them with the authenticated simulator's prices.
+    const first = setTimeout(() => setQuotes(demoQuotes()), 0);
+    const timer = setInterval(() => setQuotes(demoQuotes()), 60_000);
+    return () => { clearTimeout(first); clearInterval(timer); };
+  }, [source]);
 
-  const filteredMarkets = useMemo(() => {
-    const query = search.trim().toLowerCase();
+  const selected = markets.find(market => market.symbol === selectedSymbol) ?? markets[0];
+  const filtered = useMemo(
+    () => markets.filter(market =>
+      (market.symbol + " " + market.name).toLowerCase().includes(search.trim().toLowerCase()),
+    ),
+    [search],
+  );
+  const updateSnapshot = useCallback((value: MarketSnapshot | null) => setSnapshot(value), []);
 
-    return markets.filter((market) =>
-      `${market.symbol} ${market.name} ${market.symbol}/USDT`
-        .toLowerCase()
-        .includes(query)
-    );
-  }, [search]);
+  function selectMarket(symbol: string) {
+    if (symbol === selectedSymbol) return;
+    setSelectedSymbol(symbol);
+    setSnapshot(null);
+  }
 
-  const theme = dark
-    ? {
-        page: "bg-[#080b12] text-slate-100",
-        panel: "bg-[#0d121c] border-white/[0.08]",
-        muted: "text-slate-400",
-        subtle: "text-slate-500",
-        hover: "hover:bg-white/[0.06]",
-        input: "bg-[#080d15] border-white/10",
-      }
-    : {
-        page: "bg-[#f3f6fa] text-slate-900",
-        panel: "bg-white border-slate-200",
-        muted: "text-slate-500",
-        subtle: "text-slate-400",
-        hover: "hover:bg-slate-100",
-        input: "bg-slate-50 border-slate-200",
-      };
+  function changeSource(next: Source) {
+    if (next === source) return;
+    setSource(next);
+    setSnapshot(null);
+  }
+
+  const latestPrice = snapshot?.price;
+  const change = snapshot?.changePercent;
+  const up = (change ?? 0) >= 0;
 
   return (
-    <main className={`flex h-dvh min-h-[500px] flex-col overflow-hidden ${theme.page}`}>
-      <header className={`flex min-h-[60px] shrink-0 items-center justify-between gap-3 border-b px-3 sm:px-5 ${theme.panel}`}>
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-400 text-lg font-black text-slate-950">
-            T
+    <AppShell>
+      <div className="br-terminal">
+        <header className="br-head">
+          <div className="br-head-title">
+            <span className="br-eyebrow"><span className="br-live-dot"/> THE WORKSPACE / MARKET OVERVIEW</span>
+            <h1>Markets <span>at a glance.</span></h1>
+            <p>A precise view of movement, patterns and simulated market data.</p>
           </div>
-
-          <div className="min-w-0">
-            <div className="truncate text-sm font-bold sm:text-base">
-              Trading Pulse
-            </div>
-            <div className={`text-[10px] ${theme.muted}`}>
-              Market intelligence · Simulator
-            </div>
+          <div className="br-head-actions">
+            <span className="br-environment"><span className="br-environment-dot"/> RESEARCH ENVIRONMENT</span>
+            <Link href="/studio" className="br-studio-button"><span aria-hidden="true">✳</span> AI Studio <span aria-hidden="true">↗</span></Link>
           </div>
-        </div>
+        </header>
 
-        <div className="flex items-center gap-2">
-          <label className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${theme.input}`}>
-            <span className={theme.muted}>⌕</span>
-            <input
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setWatchlistOpen(true);
-              }}
-              onFocus={() => setWatchlistOpen(true)}
-              placeholder="Search markets"
-              aria-label="Search markets"
-              className="w-24 min-w-0 bg-transparent text-xs outline-none sm:w-36"
-            />
-          </label>
-
-          <button
-            onClick={() => setDark((value) => !value)}
-            className={`rounded-lg border px-3 py-2 text-xs ${theme.input}`}
-            aria-label="Toggle theme"
-          >
-            {dark ? "☀" : "☾"}
-          </button>
-        </div>
-      </header>
-
-      <section className="flex min-h-0 flex-1 flex-col p-2 sm:p-3">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-1 pb-3">
-          <div className="flex items-center gap-3 sm:gap-5">
-            <div>
-              <div className={`text-[11px] ${theme.muted}`}>Selected market</div>
-              <h1 className="mt-0.5 text-lg font-bold sm:text-xl">
-                {selected.symbol}/USDT
-              </h1>
-              <div className={`text-[10px] ${theme.muted}`}>{selected.name}</div>
-            </div>
-
-            <div className="border-l border-white/10 pl-3 sm:pl-5">
-              <div className="text-base font-semibold sm:text-xl">
-                ${selected.price}
-              </div>
-              <div className={`mt-1 text-xs ${selected.up ? "text-emerald-400" : "text-rose-400"}`}>
-                {selected.change} <span className={theme.muted}>24h</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="hidden items-center gap-1.5 text-[10px] text-amber-400 sm:flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-              SIMULATED DATA
+        <div className="br-mode-bar">
+          <div className="br-mode-label">
+            <span className={"br-mode-tag " + (source === "demo" ? "is-demo" : "is-connected")}>
+              {source === "demo" ? "DEMO PREVIEW" : "CONNECTED SIMULATOR"}
             </span>
-
-            <button
-              onClick={() => setWatchlistOpen((value) => !value)}
-              aria-expanded={watchlistOpen}
-              className={`rounded-lg border px-3 py-2 text-xs ${theme.input}`}
-            >
-              {watchlistOpen ? "Close markets ×" : "Markets ☰"}
-            </button>
+            <span>{source === "demo"
+              ? "Synthetic chart data for UI review — not live prices."
+              : "Authenticated, stored simulator candles — no real trades."}</span>
           </div>
+          {process.env.NODE_ENV === "development" && (
+            <div className="br-mode-switch" role="group" aria-label="Market data source">
+              <button type="button" aria-pressed={source === "demo"} className={source === "demo" ? "active" : ""} onClick={() => changeSource("demo")}>Demo</button>
+              <button type="button" aria-pressed={source === "backend"} className={source === "backend" ? "active" : ""} onClick={() => changeSource("backend")}>Connected</button>
+            </div>
+          )}
         </div>
 
-        <section className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border ${theme.panel}`}>
-          <div className={`flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-2 py-2 sm:px-3 ${theme.panel}`}>
-            <div className="flex max-w-full items-center gap-1 overflow-x-auto">
-              {timeframes.map((period) => (
-                <button
-                  key={period}
-                  onClick={() => setTimeframe(period)}
-                  aria-pressed={timeframe === period}
-                  className={`shrink-0 rounded-md px-3 py-2 text-xs font-medium transition ${
-                    timeframe === period
-                      ? "bg-cyan-400 text-slate-950"
-                      : `${theme.muted} ${theme.hover}`
-                  }`}
-                >
-                  {period}
-                </button>
-              ))}
+        <div className="br-workspace">
+          <aside className="br-watchlist" aria-label="Watchlist">
+            <div className="br-panel-heading">
+              <div><span className="br-section-caption">MARKET WATCH</span><h2>Watchlist <span className="br-count">03</span></h2></div>
+              <span className="br-header-symbol" aria-hidden="true">↗</span>
             </div>
-
-            <span className={`px-2 text-[10px] ${theme.subtle}`}>
-              OHLC · Candlesticks
-            </span>
-          </div>
-
-          <div className="relative min-h-0 flex-1">
-            <MarketChart
-              symbol={`${selected.symbol}USDT`}
-              timeframe={timeframe}
-            />
-
-            {watchlistOpen && (
-              <div className={`absolute right-2 top-2 z-20 w-72 max-w-[calc(100%-1rem)] overflow-hidden rounded-xl border shadow-2xl ${theme.panel}`}>
-                <div className={`flex items-center justify-between border-b p-3 ${theme.panel}`}>
-                  <div>
-                    <div className="text-sm font-semibold">Markets</div>
-                    <div className={`mt-1 text-[10px] ${theme.muted}`}>
-                      Select an asset to update the chart
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setWatchlistOpen(false);
-                      setSearch("");
-                    }}
-                    className={`rounded-md px-2 py-1 ${theme.muted}`}
-                    aria-label="Close markets"
-                  >
-                    ✕
+            <label className="br-search">
+              <span aria-hidden="true">⌕</span>
+              <input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search markets" aria-label="Search watchlist"/>
+              <kbd>/</kbd>
+            </label>
+            <div className="br-watchlist-header" aria-hidden="true"><span>ASSET</span><span>LAST / RANGE CHANGE</span></div>
+            <div className="br-assets">
+              {filtered.map(market => {
+                const selectedRow = market.symbol === selectedSymbol;
+                const demo = source === "demo" ? quotes[market.symbol] : undefined;
+                const price = source === "demo" ? demo?.price : selectedRow ? latestPrice : undefined;
+                const movement = source === "demo" ? demo?.change : selectedRow ? change : null;
+                const rise = (movement ?? 0) >= 0;
+                return (
+                  <button className={"br-asset" + (selectedRow ? " selected" : "")} type="button" key={market.symbol}
+                    onClick={() => selectMarket(market.symbol)} aria-pressed={selectedRow}>
+                    <span className={"br-asset-icon " + market.ticker.toLowerCase()} aria-hidden="true">{market.icon}</span>
+                    <span className="br-asset-info"><strong>{market.ticker}<em>/USDT</em></strong><small>{market.name}</small></span>
+                    <Sparkline points={demo?.spark} rising={rise}/>
+                    <span className="br-asset-value"><strong>{money(price)}</strong><small className={movement == null ? "" : rise ? "br-up" : "br-down"}>{percent(movement)}</small></span>
                   </button>
+                );
+              })}
+              {filtered.length === 0 && <p className="br-no-match">No matching markets</p>}
+            </div>
+            <div className="br-watchlist-note"><span className="br-note-icon">ⓘ</span> {source === "demo"
+              ? "All preview quotes are synthetic."
+              : "Only selected-market quotes are loaded. No invented watchlist prices."}</div>
+            <div className="br-watchlist-footer"><span className="br-status-circle"/> {markets.length} SIMULATED ASSETS <span>TRADING PULSE</span></div>
+          </aside>
+
+          <section className="br-center" aria-label="Market chart and overview">
+            <div className="br-chart-card">
+              <div className="br-chart-topline">
+                <div className="br-pair">
+                  <span className={"br-pair-icon " + selected.ticker.toLowerCase()} aria-hidden="true">{selected.icon}</span>
+                  <div>
+                    <div className="br-pair-heading"><h2>{selected.name} <span>/ USDT</span></h2><span className="br-pair-type">CRYPTO</span></div>
+                    <span className="br-pair-sub">{selected.symbol} <span>·</span> {source === "demo" ? "Synthetic chart preview" : "Stored simulator OHLCV"}</span>
+                  </div>
                 </div>
-
-                <div className="max-h-[60vh] overflow-y-auto p-2">
-                  {filteredMarkets.map((market) => (
-                    <button
-                      key={market.symbol}
-                      onClick={() => {
-                        setSelectedMarket(market.symbol);
-                        setWatchlistOpen(false);
-                        setSearch("");
-                      }}
-                      className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left ${
-                        selectedMarket === market.symbol
-                          ? "bg-cyan-400/10"
-                          : theme.hover
-                      }`}
-                    >
-                      <div>
-                        <div className="text-sm font-semibold">
-                          {market.symbol}/USDT
-                        </div>
-                        <div className={`mt-1 text-[11px] ${theme.muted}`}>
-                          {market.name}
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <div className="text-xs font-medium">${market.price}</div>
-                        <div className={`mt-1 text-xs ${market.up ? "text-emerald-400" : "text-rose-400"}`}>
-                          {market.change}
-                        </div>
-                      </div>
-                    </button>
+                <div className="br-quote">
+                  <strong>{latestPrice === undefined ? "—" : "$" + money(latestPrice)}</strong>
+                  <span className={change === null || change === undefined ? "br-quote-neutral" : up ? "br-up" : "br-down"}>
+                    {percent(change)} <small>loaded range</small>
+                  </span>
+                </div>
+              </div>
+              <div className="br-chart-toolbar">
+                <div className="br-intervals" role="group" aria-label="Chart timeframe">
+                  {timeframes.map(period => (
+                    <button key={period} type="button" aria-pressed={timeframe === period}
+                      className={timeframe === period ? "active" : ""} onClick={() => setTimeframe(period)}>{period}</button>
                   ))}
-
-                  {filteredMarkets.length === 0 && (
-                    <p className={`p-5 text-center text-xs ${theme.muted}`}>
-                      No matching markets.
-                    </p>
-                  )}
                 </div>
+                <div className="br-chart-key"><span><i className="positive"/> Bullish</span><span><i className="negative"/> Bearish</span></div>
+              </div>
+              <div className="br-chart-canvas">
+                <MarketChart symbol={selectedSymbol} timeframe={timeframe} source={source} onSnapshot={updateSnapshot}/>
+              </div>
+              <div className="br-chart-bottom">
+                <span><span className="br-status-circle"/> {source === "demo" ? "SYNTHETIC PREVIEW" : "SIMULATED MARKET"} <b>·</b> {snapshot?.candleCount ?? 0} bars</span>
+                <span>Scroll to zoom <b>·</b> Drag to pan <b>·</b> Historical SMA crossovers</span>
+              </div>
+            </div>
+            <div className="br-bottom-panels">
+              <div className="br-mini-card">
+                <div className="br-mini-header"><span>SELECTED MARKET</span><span aria-hidden="true">↗</span></div>
+                <strong>{selected.ticker} <span>/ USDT</span></strong>
+                <p>{selected.name} · {timeframe} interval</p>
+              </div>
+              <div className="br-mini-card">
+                <div className="br-mini-header"><span>LAST CANDLE CLOSE</span><span aria-hidden="true">◉</span></div>
+                <strong>{latestPrice === undefined ? "—" : "$" + money(latestPrice)}</strong>
+                <p>{source === "demo" ? "Synthetic preview candle" : "Authenticated stored candle"}</p>
+              </div>
+              <div className="br-mini-card">
+                <div className="br-mini-header"><span>LOADED RANGE</span><span aria-hidden="true">⌁</span></div>
+                <strong className={change === null || change === undefined ? "" : up ? "br-up" : "br-down"}>{percent(change)}</strong>
+                <p>First open → latest close · not 24h</p>
+              </div>
+            </div>
+          </section>
+
+          <aside className="br-right" aria-label="Market intelligence and tools">
+            <div className="br-details-card">
+              <div className="br-panel-heading"><div><span className="br-section-caption">MARKET INSIGHT</span><h2>Overview</h2></div><span className="br-details-icon">⌁</span></div>
+              <div className="br-detail-top">
+                <span>Current market</span><strong>{selected.ticker} / USDT</strong>
+                <small>{source === "demo" ? "Synthetic UI preview" : "Simulated market feed"}</small>
+              </div>
+              <div className="br-detail-rows">
+                <div><span>Last candle close</span><strong>{latestPrice === undefined ? "—" : "$" + money(latestPrice)}</strong></div>
+                <div><span>Loaded range</span><strong className={change === null || change === undefined ? "" : up ? "br-up" : "br-down"}>{percent(change)}</strong></div>
+                <div><span>Candles loaded</span><strong>{snapshot?.candleCount ?? 0}</strong></div>
+                <div><span>Timeframe</span><strong>{timeframe}</strong></div>
+              </div>
+              <div className="br-detail-tag"><span className="br-status-circle"/> {source === "demo" ? "DEMO — NO REAL PRICES" : "SIMULATION — NO EXECUTION"}</div>
+            </div>
+            {source === "backend" ? <MarketConnection/> : (
+              <div className="br-preview-card">
+                <span className="br-section-caption">PREVIEW STATUS</span>
+                <h3>Explore without setup.</h3>
+                <p>The chart is using illustrative prices. Connect Fastify when you want to inspect stored simulator candles.</p>
+                <button type="button" onClick={() => changeSource("backend")}>Inspect connected data <span aria-hidden="true">↗</span></button>
               </div>
             )}
-          </div>
-
-          <footer className={`flex shrink-0 flex-wrap items-center justify-between gap-2 border-t px-3 py-2 text-[10px] ${theme.muted}`}>
-            <span>Mouse wheel: zoom · Drag: pan</span>
-            <span>Development mode · No live trades</span>
-          </footer>
-        </section>
-      </section>
-    </main>
+            <div className="br-intelligence">
+              <div className="br-intelligence-title"><span className="br-section-caption">WORKSPACE TOOLS</span><span aria-hidden="true">✳</span></div>
+              <h3>Research, not execution.</h3>
+              <p>BUY/SELL annotations mark historical SMA 5/12 crossovers. They are not trade orders or forecasts.</p>
+              <Link href="/studio">Open AI Studio <span aria-hidden="true">↗</span></Link>
+            </div>
+          </aside>
+        </div>
+        <footer className="br-page-footer"><span>TRADING PULSE <b>·</b> MARKET ANALYTICS SIMULATOR</span><span>No real orders are placed. Demo prices are synthetic.</span></footer>
+      </div>
+    </AppShell>
   );
 }

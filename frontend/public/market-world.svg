@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="820" viewBox="0 0 1600 820" aria-hidden="true">
+  <defs>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#0c3440" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#071019" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="micro" width="36" height="36" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".8" fill="#355361" opacity=".3"/></pattern>
+  </defs>
+  <rect width="1600" height="820" fill="url(#micro)"/>
+  <ellipse cx="780" cy="405" rx="710" ry="390" fill="url(#glow)"/>
+  <g fill="#1e4151" fill-opacity=".28" stroke="#356475" stroke-opacity=".34" stroke-width="1.7" stroke-linejoin="round">
+    <!-- Decorative geographic silhouettes, intentionally subtle behind market candles. -->
+    <path d="M173 202 221 152 304 139 343 158 397 152 442 186 481 224 447 252 419 289 384 303 355 329 333 364 299 373 277 405 251 389 240 357 204 342 174 298 141 265Z"/>
+    <path d="M352 375 382 381 413 409 419 455 446 480 429 539 398 592 372 651 345 680 330 647 335 609 311 580 306 536 286 495 304 453Z"/>
+    <path d="M575 192 625 161 690 174 739 158 775 180 816 166 866 185 926 161 1009 178 1054 207 1132 207 1180 229 1232 241 1290 267 1324 305 1281 325 1220 310 1172 326 1129 351 1080 350 1033 377 1005 367 968 392 942 353 904 361 865 341 835 326 803 344 771 325 725 334 691 300 652 288 612 253Z"/>
+    <path d="M701 348 755 357 796 389 814 439 789 487 771 549 727 597 692 582 661 532 643 468 650 420Z"/>
+    <path d="M1160 487 1209 463 1259 477 1300 507 1356 540 1336 580 1304 593 1253 580 1217 548 1177 538Z"/>
+    <path d="M1396 552 1418 570 1407 597 1385 585Z"/>
+    <path d="M541 296 555 308 543 323 530 310Z"/>
+  </g>
+  <g fill="none" stroke="#1c5d66" stroke-opacity=".29" stroke-width="1.4">
+    <ellipse cx="788" cy="405" rx="642" ry="284"/>
+    <ellipse cx="788" cy="405" rx="482" ry="325"/>
+    <ellipse cx="788" cy="405" rx="277" ry="349"/>
+    <path d="M153 405H1427M788 56V756"/>
+  </g>
+  <g fill="none" stroke="#4c9185" stroke-opacity=".40" stroke-width="1.8" stroke-dasharray="5 9">
+    <path d="M230 540 Q440 230 640 442 T1080 369 T1430 211"/>
+    <path d="M205 307 Q480 525 799 273 T1318 455"/>
+  </g>
+  <g fill="#40c5a1" fill-opacity=".45">
+    <circle cx="230" cy="540" r="4"/>
+    <circle cx="640" cy="442" r="4"/>
+    <circle cx="1080" cy="369" r="4"/>
+    <circle cx="1430" cy="211" r="4"/>
+  </g>
+</svg>

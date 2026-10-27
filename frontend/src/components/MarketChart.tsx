@@ -1,18 +1,37 @@
 
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
+  LineSeries,
+  LineStyle,
+  createSeriesMarkers,
   type IChartApi,
   type CandlestickData,
   type Time,
 } from "lightweight-charts";
+import { movingAverageLine, movingAverageMarkers } from "@/lib/chartSignals";
+import { generateDemoCandles } from "@/lib/demoCandles";
+import { marketColors } from "@/lib/marketColors";
+import {
+  foldTick, overlayLiveMinutes, parseOpenMinute,
+  type LiveMinute, type LiveTick, type StoredOpenMinute,
+} from "@/lib/liveCandles";
+
+export type MarketSnapshot = {
+  price: number;
+  changePercent: number | null;
+  candleCount: number;
+  lastUpdated: string;
+};
 
 type MarketChartProps = {
   symbol: string;
   timeframe: string;
+  source: "demo" | "backend";
+  onSnapshot?: (snapshot: MarketSnapshot | null) => void;
 };
 
 type ApiCandle = {
@@ -28,6 +47,7 @@ type ApiCandle = {
 type ChartResponse = {
   candles?: ApiCandle[];
   data?: ApiCandle[] | { candles?: ApiCandle[] };
+  openCandle?: StoredOpenMinute | null;
 };
 
 type ValidCandle = {
@@ -46,7 +66,7 @@ const INTERVAL_SECONDS: Record<string, number> = {
   "4H": 14400,
   "1D": 86400,
   "1W": 604800,
-  "1M": 2592000,
+  // Calendar months are handled separately in groupCandles.
 };
 
 function parseTimestamp(value: string | number | undefined): number | null {
@@ -107,7 +127,11 @@ function groupCandles(
   const grouped = new Map<number, ValidCandle>();
 
   for (const candle of valid) {
-    const bucket = Math.floor(candle.seconds / interval) * interval;
+    const bucket = timeframe === "1M"
+      ? Date.UTC(new Date(candle.seconds * 1000).getUTCFullYear(), new Date(candle.seconds * 1000).getUTCMonth(), 1) / 1000
+      : timeframe === "1W"
+        ? Math.floor((candle.seconds + 3 * 86400) / 604800) * 604800 - 3 * 86400
+        : Math.floor(candle.seconds / interval) * interval;
     const existing = grouped.get(bucket);
 
     if (!existing) {
@@ -133,26 +157,44 @@ function groupCandles(
 export default function MarketChart({
   symbol,
   timeframe,
+  source,
+  onSnapshot,
 }: MarketChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
+  const [streamStatus, setStreamStatus] = useState<"connecting" | "live" | "fallback" | "demo">("connecting");
+  const [showSignals, setShowSignals] = useState(true);
+  const signalsEnabled = useRef(true);
+  const overlayUpdate = useRef<((enabled: boolean) => void) | null>(null);
+
+  useEffect(() => {
+    signalsEnabled.current = showSignals;
+    overlayUpdate.current?.(showSignals);
+  }, [showSignals]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
     let hasLoadedData = false;
-    let resizeObserver: ResizeObserver | undefined;
+    let fetching = false;
+    let reloadPending = false;
+    setStatus("loading");
+    setStreamStatus(source === "demo" ? "demo" : process.env.NODE_ENV === "development" ? "connecting" : "fallback");
+    onSnapshot?.(null);
+    const variable = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 
     const chart = createChart(container, {
       width: container.clientWidth,
       height: container.clientHeight || 600,
       layout: {
-        background: { color: "#0d121c" },
-        textColor: "#9aaac0",
+        background: { color: "rgba(0, 0, 0, 0)" },
+        textColor: variable("--muted", "#9aaac0"),
         attributionLogo: false,
+        // Match the TradingView-inspired UI typography on price/time axes.
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif',
       },
       grid: {
         vertLines: { color: "rgba(151,169,196,0.07)" },
@@ -162,17 +204,17 @@ export default function MarketChart({
         borderColor: "rgba(151,169,196,0.14)",
         autoScale: true,
         scaleMargins: {
-          top: 0.08,
-          bottom: 0.08,
+          top: 0.20,
+          bottom: 0.16,
         },
       },
       timeScale: {
         borderColor: "rgba(151,169,196,0.14)",
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 5,
-        barSpacing: 5,
-        minBarSpacing: 2,
+        rightOffset: 9,
+        barSpacing: 9,
+        minBarSpacing: 3,
       },
       crosshair: {
         vertLine: {
@@ -200,68 +242,196 @@ export default function MarketChart({
     chartRef.current = chart;
 
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#36d6a0",
-      downColor: "#ff687d",
+      upColor: marketColors("dark").up,
+      downColor: marketColors("dark").down,
       borderVisible: false,
-      wickUpColor: "#36d6a0",
-      wickDownColor: "#ff687d",
+      wickUpColor: marketColors("dark").up,
+      wickDownColor: marketColors("dark").down,
       wickVisible: true,
       priceLineVisible: true,
     });
 
+    // All overlays are derived from historical completed candles, never
+    // generated prices. BUY/SELL labels mark past SMA crossovers only.
+    const fastLine = chart.addSeries(LineSeries, {
+      color: "#ededed",
+      lineWidth: 2,
+      lineStyle: LineStyle.Dashed,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    const slowLine = chart.addSeries(LineSeries, {
+      color: "#909090",
+      lineWidth: 1,
+      lineStyle: LineStyle.Dotted,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    const markerPlugin = createSeriesMarkers(series, []);
+    let latestCandles: CandlestickData<Time>[] = [];
+    let completedCandles: CandlestickData<Time>[] = [];
+    let lastCompletedMinute = -Infinity;
+    const pendingMinutes = new Map<number, LiveMinute>();
+
+    function discardFinishedMinutes() {
+      for (const minute of pendingMinutes.keys()) {
+        if (minute <= lastCompletedMinute) pendingMinutes.delete(minute);
+      }
+      while (pendingMinutes.size > 3) {
+        pendingMinutes.delete(Math.min(...pendingMinutes.keys()));
+      }
+    }
+
+    // SMA signals are based on completed historical candles, never previews.
+    function renderDisplay() {
+      discardFinishedMinutes();
+      const shown = overlayLiveMinutes(
+        completedCandles, [...pendingMinutes.values()], timeframe, lastCompletedMinute
+      );
+      series.setData(shown);
+      if (!shown.length) {
+        setStatus("empty");
+        onSnapshot?.(null);
+        return 0;
+      }
+      const first = shown[0];
+      const last = shown[shown.length - 1];
+      setStatus("ready");
+      onSnapshot?.({
+        price: last.close,
+        changePercent: first.open > 0 ? ((last.close - first.open) / first.open) * 100 : null,
+        candleCount: shown.length,
+        lastUpdated: pendingMinutes.size
+          ? new Date(Math.max(...[...pendingMinutes.values()].map(m => m.lastTickAt))).toISOString()
+          : new Date(Number(last.time) * 1000).toISOString(),
+      });
+      return shown.length;
+    }
+
+    const updateOverlay = (enabled: boolean) => {
+      const colors = marketColors(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+      markerPlugin.setMarkers(enabled
+        ? movingAverageMarkers(latestCandles).map(marker => ({
+            ...marker,
+            color: marker.text === "BUY" ? colors.up : colors.down,
+          }))
+        : []);
+      fastLine.setData(enabled ? movingAverageLine(latestCandles, 5) : []);
+      slowLine.setData(enabled ? movingAverageLine(latestCandles, 12) : []);
+    };
+    overlayUpdate.current = updateOverlay;
+
+    const applyTheme = () => {
+      const light = document.documentElement.dataset.theme === "light";
+      const colors = marketColors(light ? "light" : "dark");
+      chart.applyOptions({
+        layout: {
+          background: { color: "rgba(0, 0, 0, 0)" },
+          textColor: variable("--muted", "#9aaac0"),
+        },
+        grid: {
+          vertLines: { color: variable("--chart-grid", "rgba(151,169,196,0.08)") },
+          horzLines: { color: variable("--chart-grid", "rgba(151,169,196,0.08)") },
+        },
+      });
+      series.applyOptions({
+        upColor: colors.up,
+        wickUpColor: colors.up,
+        downColor: colors.down,
+        wickDownColor: colors.down,
+      });
+      fastLine.applyOptions({ color: light ? "#333333" : "#ededed" });
+      slowLine.applyOptions({ color: light ? "#888888" : "#909090" });
+      updateOverlay(signalsEnabled.current);
+    };
+    applyTheme();
+    const themeObserver = new MutationObserver(applyTheme);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
     const loadCandles = async () => {
+      if (fetching) {
+        reloadPending = true;
+        return;
+      }
+      fetching = true;
       try {
         const previousRange = hasLoadedData
           ? chart.timeScale().getVisibleLogicalRange()
           : null;
 
-        const wasFollowingLatest =
-          previousRange !== null &&
-          previousRange !== undefined &&
-          chart.timeScale().getVisibleLogicalRange() !== null;
 
-        const response = await fetch(
-          `/api/charts?symbol=${encodeURIComponent(symbol)}&limit=500`,
-          { cache: "no-store" },
-        );
+        let rawCandles: ApiCandle[];
+        let recovered: LiveMinute | null = null;
+        if (source === "demo") {
+          rawCandles = generateDemoCandles(symbol);
+        } else {
+          const response = await fetch(
+            `/api/charts?symbol=${encodeURIComponent(symbol)}&limit=500`,
+            { cache: "no-store" },
+          );
+          if (!response.ok) throw new Error(`Chart request failed: ${response.status}`);
 
-        if (!response.ok) {
-          throw new Error(`Chart request failed: ${response.status}`);
+          const payload = (await response.json()) as ChartResponse;
+          rawCandles = Array.isArray(payload.candles)
+            ? payload.candles
+            : Array.isArray(payload.data)
+              ? payload.data
+              : Array.isArray(payload.data?.candles)
+                ? payload.data.candles
+                : [];
+          recovered = parseOpenMinute(payload.openCandle);
         }
-
-        const payload = (await response.json()) as ChartResponse;
 
         if (cancelled) return;
 
-        const rawCandles = Array.isArray(payload.candles)
-          ? payload.candles
-          : Array.isArray(payload.data)
-            ? payload.data
-            : Array.isArray(payload.data?.candles)
-              ? payload.data.candles
-              : [];
-
         const candles = groupCandles(rawCandles, timeframe);
-
-        if (candles.length === 0) return;
-
-        series.setData(candles);
-
+        const minuteBars = groupCandles(rawCandles, "1m");
+        lastCompletedMinute = minuteBars.length
+          ? Number(minuteBars[minuteBars.length - 1].time) : -Infinity;
+        completedCandles = candles;
+        latestCandles = candles;
+        // A streamed tick may be newer than the REST response in flight.
+        if (recovered && recovered.time > lastCompletedMinute) {
+          const previous = pendingMinutes.get(recovered.time);
+          if (!previous || recovered.lastTickAt >= previous.lastTickAt) {
+            pendingMinutes.set(recovered.time, recovered);
+          }
+        }
+        updateOverlay(signalsEnabled.current);
+        const count = renderDisplay();
         if (!hasLoadedData) {
-          chart.timeScale().fitContent();
-          hasLoadedData = true;
-        } else if (
-          previousRange &&
-          !wasFollowingLatest
-        ) {
+          if (count > 0) {
+            if (source === "demo") {
+              chart.timeScale().setVisibleLogicalRange({
+                from: Math.max(0, count - 85),
+                to: count + 5,
+              });
+            } else {
+              chart.timeScale().fitContent();
+            }
+            hasLoadedData = true;
+          }
+        } else if (previousRange) {
           chart.timeScale().setVisibleLogicalRange(previousRange);
         }
       } catch (error) {
+        if (!cancelled) {
+          setStatus("error");
+          onSnapshot?.(null);
+        }
         console.error("Unable to load market candles:", error);
+      } finally {
+        fetching = false;
+        if (reloadPending && !cancelled) {
+          reloadPending = false;
+          void loadCandles();
+        }
       }
     };
 
-    resizeObserver = new ResizeObserver(() => {
+    const resizeObserver = new ResizeObserver(() => {
       if (!cancelled && container.clientWidth > 0) {
         chart.applyOptions({
           width: container.clientWidth,
@@ -273,24 +443,93 @@ export default function MarketChart({
     resizeObserver.observe(container);
 
     void loadCandles();
-    timer = setInterval(() => {
+
+    // EventSource is connected only to Next.js, never directly to the backend.
+    // The Next route keeps the viewer JWT private and forwards only a notification.
+    // Fall back to occasional REST refreshes if the stream is not available.
+    let stream: EventSource | undefined;
+    if (source === "backend" && process.env.NODE_ENV === "development") {
+      stream = new EventSource("/api/stream?symbol=" + encodeURIComponent(symbol));
+      stream.addEventListener("ready", () => {
+        if (!cancelled) {
+          setStreamStatus("live");
+          void loadCandles(); // Catch events missed between initial fetch and handshake.
+        }
+      });
+      stream.addEventListener("candle", () => {
+        if (!cancelled) void loadCandles();
+      });
+      stream.addEventListener("tick", event => {
+        if (cancelled) return;
+        try {
+          const tick = JSON.parse(event.data) as LiveTick & { symbol?: string };
+          if (tick.symbol !== symbol || typeof tick.timestamp !== "string") return;
+          const milliseconds = Date.parse(tick.timestamp);
+          if (!Number.isFinite(milliseconds)) return;
+          const minute = Math.floor(milliseconds / 60_000) * 60;
+          if (minute <= lastCompletedMinute) return;
+          const next = foldTick(pendingMinutes.get(minute) ?? null, tick);
+          if (!next) return;
+          pendingMinutes.set(minute, next);
+          const count = renderDisplay();
+          if (!hasLoadedData && count > 0) {
+            chart.timeScale().fitContent();
+            hasLoadedData = true;
+          }
+        } catch {
+          // Discard malformed events; stored candles remain authoritative.
+        }
+      });
+      stream.addEventListener("offline", () => {
+        if (!cancelled) setStreamStatus("fallback");
+      });
+      stream.onerror = () => {
+        if (!cancelled) setStreamStatus("fallback");
+      };
+    }
+
+    const timer = setInterval(() => {
       void loadCandles();
-    }, 10000);
+    }, 60_000);
 
     return () => {
       cancelled = true;
-      if (timer) clearInterval(timer);
-      resizeObserver?.disconnect();
+      clearInterval(timer);
+      stream?.close();
+      resizeObserver.disconnect();
+      themeObserver.disconnect();
+      overlayUpdate.current = null;
       chart.remove();
       chartRef.current = null;
     };
-  }, [symbol, timeframe]);
+  }, [symbol, timeframe, source, onSnapshot]);
 
   return (
-    <div
-      ref={containerRef}
-      className="market-chart"
-      aria-label={`${symbol} ${timeframe} candlestick chart`}
-    />
+    <div className="tp-chart-stage">
+      <div ref={containerRef} className="market-chart" aria-label={symbol + " " + timeframe + " candlestick chart"} />
+      <div className="tp-signal-controls">
+        <span className="tp-signal-method">SMA 5 / 12 · HISTORICAL</span>
+        <button
+          type="button"
+          className={"tp-signal-toggle" + (showSignals ? " active" : "")}
+          aria-pressed={showSignals}
+          aria-label="Toggle illustrative moving average crossover markers"
+          onClick={() => setShowSignals((enabled) => !enabled)}
+        >
+          {showSignals ? "Signals on" : "Signals off"}
+        </button>
+      </div>
+      <div className={"tp-stream-state tp-stream-state-" + streamStatus} role="status" aria-live="polite">
+        <span className="tp-stream-led" aria-hidden="true" />
+        {streamStatus === "demo" ? "SYNTHETIC DEMO · NO BACKEND" : streamStatus === "live" ? "LIVE · FORMING CANDLE" : streamStatus === "connecting" ? "CONNECTING TO STREAM" : "REST FALLBACK · 60S"}
+      </div>
+      {status !== "ready" && (
+        <div className="tp-chart-state" role="status" aria-live="polite">
+          <span className="tp-chart-state-glyph" aria-hidden="true">⌁</span>
+          <strong>{status === "loading" ? (source === "demo" ? "Preparing chart preview…" : "Connecting to market data…") : status === "empty" ? "Waiting for candles" : "Chart data unavailable"}</strong>
+          <span>{status === "loading" ? (source === "demo" ? "Loading locally generated synthetic candles" : "Retrieving stored market candles") : status === "empty" ? "Start the simulator to receive ticks and form the current candle." : "Check the backend, Redis, database and chart API."}</span>
+        </div>
+      )}
+    </div>
   );
 }

@@ -6,7 +6,7 @@ const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
 
 const API_URL =
   process.env.TRADING_PULSE_API_URL ??
-  'http://localhost:3000'
+  'http://127.0.0.1:3001'
 
 const SIMULATOR_TOKEN = process.env.SIMULATOR_TOKEN
 

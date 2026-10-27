@@ -1,5 +1,8 @@
 
 import { FastifyInstance } from 'fastify'
+import { evaluatePriceAlerts } from '../services/priceAlerts'
+import { broadcastToCharts } from './streams'
+import { loadOpenMinute } from '../services/openCandle'
 
 const tradeIngestionSchema = {
   body: {
@@ -55,6 +58,9 @@ export default async function tradeRoutes(fastify: FastifyInstance) {
       }
 
       const clientId = request.tenant.clientId
+      if (request.tenant.role !== 'high_frequency_ingestion_worker') {
+        return reply.code(403).send({ success: false, error: 'Ingestion role required' })
+      }
 
       try {
         const tickData = {
@@ -66,21 +72,54 @@ export default async function tradeRoutes(fastify: FastifyInstance) {
           timestamp: new Date().toISOString()
         }
 
-        // Use the same key convention in ingestion and aggregation.
-        await fastify.redis.lPush(
-          `ticks:${clientId}:${symbol}`,
-          JSON.stringify(tickData)
-        )
+        // Persist the tick first: PostgreSQL is the durable market-data source.
+        // Aggregation can recover these trades after a Redis interruption.
+        const saved = await fastify.db.trade.create({ data: tickData })
+
+        // Emit only after a successful PostgreSQL commit, tenant-scoped.
+        broadcastToCharts('TICK', {
+          clientId,
+          symbol,
+          // Match PostgreSQL DECIMAL(18,4), not unrounded request values.
+          price: Number(saved.price),
+          quantity: Number(saved.quantity),
+          timestamp: saved.timestamp.toISOString()
+        })
+
+        // Alert evaluation is best-effort and follows durable trade storage.
+        // An alert-service outage must not imply the trade was rejected.
+        try {
+          await evaluatePriceAlerts(fastify, clientId, symbol, price)
+        } catch (alertError) {
+          fastify.log.warn({ err: alertError, symbol }, 'Trade persisted; price alert evaluation delayed')
+        }
+
+        // Redis is a bounded, best-effort hot cache for predictive analytics.
+        // A cache outage must not erase an already committed trade.
+        let cached = false
+        try {
+          const key = `ticks:${clientId}:${symbol}`
+          await fastify.redis.multi()
+            .lPush(key, JSON.stringify(tickData))
+            .lTrim(key, 0, 1999)
+            .expire(key, 86_400)
+            .exec()
+          cached = true
+        } catch (cacheError) {
+          fastify.log.warn({ err: cacheError, symbol }, 'Tick persisted, Redis cache unavailable')
+        }
 
         return reply.code(202).send({
           success: true,
-          message: 'Tick accepted for processing'
+          id: saved.id,
+          cached,
+          message: cached ? 'Tick persisted and cached' : 'Tick persisted; predictive cache delayed'
         })
       } catch (error) {
         fastify.log.error(error)
         return reply.code(503).send({
           success: false,
-          error: 'Market tick could not be queued'
+          error: 'Market tick could not be persisted'
         })
       }
     }
@@ -158,11 +197,14 @@ export default async function tradeRoutes(fastify: FastifyInstance) {
           take: limit
         })
 
+        // Unfinished minute is separate from the authoritative completed OHLCV.
+        const openCandle = await loadOpenMinute(fastify, clientId, symbol)
         return reply.send({
           success: true,
           tenant: clientId,
           symbol,
-          data: candles.reverse()
+          data: candles.reverse(),
+          openCandle
         })
       } catch (error) {
         fastify.log.error(error)
