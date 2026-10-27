@@ -172,6 +172,62 @@ async function inspectConnectedWatchlist() {
   }
 }
 
+async function inspectHistoricalAnalytics(viewport) {
+  const page = await browser.newPage({ viewport });
+  try {
+    await page.route("**/api/analytics?*", async route => {
+      const url = new URL(route.request().url());
+      const symbol = url.searchParams.get("symbol");
+      const empty = symbol === "SOLUSDT";
+      const values = [
+        { timestamp: "2026-10-27T12:30:00.000Z", open: 100, high: 110, low: 99, close: 108, volume: 2 },
+        { timestamp: "2026-10-27T12:31:00.000Z", open: 108, high: 109, low: 95, close: 98, volume: 3 },
+      ];
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        success: true, symbol, granularity: "completed-1m",
+        requestedBars: Number(url.searchParams.get("limit")),
+        summary: empty ? {
+          candleCount: 0, firstAt: null, lastAt: null,
+          firstOpen: null, lastClose: null, rangeChangePercent: null,
+          periodHigh: null, periodLow: null, totalVolume: null,
+          averageVolume: null, bullishCount: 0, bearishCount: 0,
+          unchangedCount: 0, maxCloseDrawdownPercent: null,
+        } : {
+          candleCount: 2, firstAt: values[0].timestamp, lastAt: values[1].timestamp,
+          firstOpen: 100, lastClose: 98, rangeChangePercent: -2,
+          periodHigh: 110, periodLow: 95, totalVolume: 5,
+          averageVolume: 2.5, bullishCount: 1, bearishCount: 1,
+          unchangedCount: 0, maxCloseDrawdownPercent: (10 / 108) * 100,
+        },
+        candles: empty ? [] : values,
+      }) });
+    });
+    const response = await page.goto(origin + "/analytics", { waitUntil: "domcontentloaded" });
+    assert.equal(response?.status(), 200);
+    await page.getByRole("heading", { name: "Historical analytics." }).waitFor({ state: "visible" });
+    await page.locator(".ha-summary-top").waitFor({ state: "visible" });
+    assert.equal(await page.locator(".ha-table tbody tr").count(), 2);
+    assert.equal(await page.locator(".ha-summary-top>div").nth(0).locator("strong").textContent(), "2");
+    assert.equal(await page.locator(".ha-summary-top>div").nth(1).locator("strong").textContent(), "-2.00%");
+    assert.equal(await page.locator(".ha-chart svg").count(), 1);
+    assert.equal(await page.locator(".ha-volume-bars span").count(), 2);
+    const geometry = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth, width: innerWidth,
+    }));
+    assert.ok(geometry.scroll <= geometry.width + 6, "Analytics must not overflow on mobile: " + JSON.stringify(geometry));
+    await page.locator("#ha-symbol").selectOption("SOLUSDT");
+    await page.getByText("No completed candles have been stored for this market.").waitFor();
+    assert.equal(await page.locator(".ha-table tbody tr").count(), 0);
+    await page.getByRole("button", { name: "Switch to light mode" }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.theme === "light");
+    const panel = await page.locator(".ha-card").first().evaluate(element => getComputedStyle(element).backgroundColor);
+    assert.equal(panel, "rgb(255, 255, 255)");
+    console.log("PASS historical analytics " + JSON.stringify({ viewport, panel, geometry }));
+  } finally {
+    await page.close();
+  }
+}
+
 async function inspectAlerts() {
   const page = await browser.newPage({ viewport: { width: 1390, height: 780 } });
   try {
@@ -223,6 +279,8 @@ try {
   await inspectStudio();
   await inspectAlerts();
   await inspectConnectedWatchlist();
+  await inspectHistoricalAnalytics({ width: 1390, height: 780 });
+  await inspectHistoricalAnalytics({ width: 390, height: 844 });
 } finally {
   if (browser) await browser.close();
   app.kill("SIGTERM");
