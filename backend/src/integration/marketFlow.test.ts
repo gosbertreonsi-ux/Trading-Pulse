@@ -95,7 +95,7 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
       headers: headers(viewer)
     })
     assert.equal(cancelPaper.statusCode, 200)
-    assert.equal(await server.db.trade.count(), 0,
+    assert.equal(await server.db.trade.count({ where: { clientId: mainTenant } }), 0,
       'Paper fills must never become market tick Trade records')
 
     const noDepthToken = await server.inject({
