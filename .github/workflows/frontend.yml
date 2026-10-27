@@ -57,4 +57,5 @@ jobs:
             frontend/broker-desktop-light.png
             frontend/broker-mobile.png
             frontend/broker-mobile-light.png
+            frontend/studio-desktop-light.png
           if-no-files-found: ignore
