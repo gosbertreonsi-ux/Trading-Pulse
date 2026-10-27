@@ -115,11 +115,36 @@ async function inspectPage(viewport, screenshot) {
   }
 }
 
+async function inspectStudio() {
+  const page = await browser.newPage({ viewport: { width: 1390, height: 780 } });
+  try {
+    const response = await page.goto(origin + "/studio", { waitUntil: "domcontentloaded" });
+    assert.equal(response?.status(), 200);
+    await page.locator(".tp-prompt-input").waitFor({ state: "visible" });
+    assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+    const darkPanel = await page.locator(".tp-studio-panel").first().evaluate(
+      element => getComputedStyle(element).backgroundColor,
+    );
+    assert.equal(darkPanel, "rgb(24, 24, 24)", "Studio panel should inherit the dark monochrome palette");
+    await page.getByRole("button", { name: "Switch to light mode" }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.theme === "light");
+    const lightPanel = await page.locator(".tp-studio-panel").first().evaluate(
+      element => getComputedStyle(element).backgroundColor,
+    );
+    assert.equal(lightPanel, "rgb(255, 255, 255)", "Studio panel should inherit the light monochrome palette");
+    await page.screenshot({ path: "studio-desktop-light.png", fullPage: true });
+    console.log("PASS studio " + JSON.stringify({ darkPanel, lightPanel }));
+  } finally {
+    await page.close();
+  }
+}
+
 try {
   await waitUntilReady();
   browser = await chromium.launch({ channel: "chrome", headless: true, args: ["--no-sandbox"] });
   await inspectPage({ width: 1390, height: 780 }, "broker-desktop.png");
   await inspectPage({ width: 390, height: 844 }, "broker-mobile.png");
+  await inspectStudio();
 } finally {
   if (browser) await browser.close();
   app.kill("SIGTERM");
