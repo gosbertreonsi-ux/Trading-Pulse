@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import MarketChart, { type MarketSnapshot } from "@/components/MarketChart";
+import MarketConnection from "@/components/MarketConnection";
 
 const markets = [
   { symbol: "BTCUSDT", ticker: "BTC", name: "Bitcoin", mark: "₿" },
@@ -117,6 +118,7 @@ export default function Home() {
           </section>
 
           <aside className="tp-market-side" aria-label="Market tools">
+            <MarketConnection />
             <div className="tp-watchlist tp-side-card">
               <div className="tp-side-head"><div><span className="tp-eyebrow">YOUR MARKETS</span><h3>Watchlist</h3></div><span className="tp-count">03</span></div>
               <label className="tp-search-wrap">
