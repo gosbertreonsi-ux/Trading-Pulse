@@ -193,6 +193,8 @@ export default function MarketChart({
         background: { color: "rgba(0, 0, 0, 0)" },
         textColor: variable("--muted", "#9aaac0"),
         attributionLogo: false,
+        // Match the TradingView-inspired UI typography on price/time axes.
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif',
       },
       grid: {
         vertLines: { color: "rgba(151,169,196,0.07)" },
