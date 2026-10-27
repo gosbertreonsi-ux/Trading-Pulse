@@ -8,6 +8,7 @@ import securityPlugin from '../plugins/security'
 import tradeRoutes from '../routes/trades'
 import alertRoutes from '../routes/alerts'
 import marketOverviewRoutes from '../routes/marketOverview'
+import historicalAnalyticsRoutes from '../routes/historicalAnalytics'
 import { aggregateCandlestick } from '../services/aggregator'
 
 // Requires disposable PostgreSQL and Redis services. The dedicated CI job
@@ -30,6 +31,7 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
     await server.register(tradeRoutes)
     await server.register(alertRoutes)
     await server.register(marketOverviewRoutes)
+    await server.register(historicalAnalyticsRoutes)
     await server.ready()
 
     const mainTenant = 'integration-primary'
@@ -39,6 +41,25 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
     const otherViewer = server.jwt.sign({ client: otherTenant, role: 'viewer' }, { expiresIn: '1h' })
     const symbol = 'BTCUSDT'
     const headers = (token: string) => ({ authorization: `Bearer ${token}` })
+
+    const noHistoryToken = await server.inject({ method: 'GET', url: '/api/v1/analytics/history?symbol=BTCUSDT' })
+    assert.equal(noHistoryToken.statusCode, 401, 'Historical candles require authentication')
+    const invalidWindow = await server.inject({
+      method: 'GET', url: '/api/v1/analytics/history?symbol=BTCUSDT&limit=10000',
+      headers: headers(viewer)
+    })
+    assert.equal(invalidWindow.statusCode, 400, 'History reads are bounded')
+    const otherEmptyHistory = await server.inject({
+      method: 'GET', url: '/api/v1/analytics/history?symbol=BTCUSDT&limit=60',
+      headers: headers(otherViewer)
+    })
+    assert.equal(otherEmptyHistory.statusCode, 200)
+    assert.equal((otherEmptyHistory.json() as {
+      summary: { candleCount: number; firstOpen: number | null }
+    }).summary.candleCount, 0)
+    assert.equal((otherEmptyHistory.json() as {
+      summary: { candleCount: number; firstOpen: number | null }
+    }).summary.firstOpen, null, 'Empty tenant has no invented history')
 
     const noMarketToken = await server.inject({ method: 'GET', url: '/api/v1/markets/overview' })
     assert.equal(noMarketToken.statusCode, 401, 'Market quotes require a viewer JWT')
@@ -193,6 +214,38 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
       [Number(candle.open), Number(candle.high), Number(candle.low), Number(candle.close), Number(candle.volume)],
       [100, 106, 99, 99, 6]
     )
+
+    const historyResponse = await server.inject({
+      method: 'GET', url: '/api/v1/analytics/history?symbol=BTCUSDT&limit=60',
+      headers: headers(viewer)
+    })
+    assert.equal(historyResponse.statusCode, 200, historyResponse.body)
+    const historical = historyResponse.json() as {
+      granularity: string;
+      summary: {
+        candleCount: number; firstOpen: number; lastClose: number;
+        totalVolume: number; periodHigh: number; periodLow: number;
+        rangeChangePercent: number
+      };
+      candles: Array<{ timestamp: string; close: number }>
+    }
+    assert.equal(historical.granularity, 'completed-1m')
+    assert.equal(historical.summary.candleCount, 1)
+    assert.equal(historical.summary.firstOpen, 100)
+    assert.equal(historical.summary.lastClose, 99)
+    assert.equal(historical.summary.periodHigh, 106)
+    assert.equal(historical.summary.periodLow, 99)
+    assert.equal(historical.summary.totalVolume, 6)
+    assert.equal(historical.summary.rangeChangePercent, -1)
+    assert.equal(historical.candles.length, 1)
+    assert.equal(new Date(historical.candles[0].timestamp).getTime(), start)
+    const otherHistory = await server.inject({
+      method: 'GET', url: '/api/v1/analytics/history?symbol=BTCUSDT&limit=60',
+      headers: headers(otherViewer)
+    })
+    assert.equal((otherHistory.json() as { candles: unknown[] }).candles.length, 0,
+      'Historical simulator data is never cross-tenant' )
+
 
     const hiddenChart = await server.inject({
       method: 'GET', url: `/api/v1/charts?symbol=${symbol}`, headers: headers(otherViewer)
