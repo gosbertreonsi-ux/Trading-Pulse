@@ -14,6 +14,7 @@ import {
 } from "lightweight-charts";
 import { movingAverageLine, movingAverageMarkers } from "@/lib/chartSignals";
 import { generateDemoCandles } from "@/lib/demoCandles";
+import { marketColors } from "@/lib/marketColors";
 
 export type MarketSnapshot = {
   price: number;
@@ -234,11 +235,11 @@ export default function MarketChart({
     chartRef.current = chart;
 
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#f3f3f3",
-      downColor: "#7e7e7e",
+      upColor: marketColors("dark").up,
+      downColor: marketColors("dark").down,
       borderVisible: false,
-      wickUpColor: "#f3f3f3",
-      wickDownColor: "#7e7e7e",
+      wickUpColor: marketColors("dark").up,
+      wickDownColor: marketColors("dark").down,
       wickVisible: true,
       priceLineVisible: true,
     });
@@ -265,13 +266,11 @@ export default function MarketChart({
     let latestCandles: CandlestickData<Time>[] = [];
 
     const updateOverlay = (enabled: boolean) => {
-      const isLight = document.documentElement.dataset.theme === "light";
+      const colors = marketColors(document.documentElement.dataset.theme === "light" ? "light" : "dark");
       markerPlugin.setMarkers(enabled
         ? movingAverageMarkers(latestCandles).map(marker => ({
             ...marker,
-            color: marker.text === "BUY"
-              ? (isLight ? "#202020" : "#f1f1f1")
-              : (isLight ? "#777777" : "#999999"),
+            color: marker.text === "BUY" ? colors.up : colors.down,
           }))
         : []);
       fastLine.setData(enabled ? movingAverageLine(latestCandles, 5) : []);
@@ -281,6 +280,7 @@ export default function MarketChart({
 
     const applyTheme = () => {
       const light = document.documentElement.dataset.theme === "light";
+      const colors = marketColors(light ? "light" : "dark");
       chart.applyOptions({
         layout: {
           background: { color: "rgba(0, 0, 0, 0)" },
@@ -292,10 +292,10 @@ export default function MarketChart({
         },
       });
       series.applyOptions({
-        upColor: light ? "#202020" : "#f3f3f3",
-        wickUpColor: light ? "#202020" : "#f3f3f3",
-        downColor: light ? "#aaaaaa" : "#7e7e7e",
-        wickDownColor: light ? "#aaaaaa" : "#7e7e7e",
+        upColor: colors.up,
+        wickUpColor: colors.up,
+        downColor: colors.down,
+        wickDownColor: colors.down,
       });
       fastLine.applyOptions({ color: light ? "#333333" : "#ededed" });
       slowLine.applyOptions({ color: light ? "#888888" : "#909090" });
