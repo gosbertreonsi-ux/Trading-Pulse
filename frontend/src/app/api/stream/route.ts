@@ -119,19 +119,37 @@ export async function GET(request: NextRequest) {
           const data: unknown = JSON.parse(event.data);
           if (!data || typeof data !== "object") return;
           const item = data as Record<string, unknown>;
+          if (item.symbol !== symbol) return;
+
+          if (item.type === "TICK") {
+            const price = item.price;
+            const quantity = item.quantity;
+            const timestamp = item.timestamp;
+            if (
+              typeof price !== "number" || !Number.isFinite(price) || price <= 0 ||
+              typeof quantity !== "number" || !Number.isFinite(quantity) || quantity <= 0 ||
+              typeof timestamp !== "string" || !Number.isFinite(Date.parse(timestamp))
+            ) return;
+
+            // Accept only tenant-filtered upstream records for this symbol.
+            // Forward essential tick fields, never claims or auth headers.
+            write("event: tick\\ndata: " + JSON.stringify({
+              symbol, price, quantity, timestamp,
+            }) + "\\n\\n");
+            return;
+          }
+
           if (
             item.type !== "CANDLE" ||
-            item.symbol !== symbol ||
             item.completed !== true ||
             typeof item.timestamp !== "string"
           ) return;
 
-          // A notification, not untrusted candle values. Chart reloads the
-          // authenticated historical API as its source of truth.
-          write("event: candle\ndata: " + JSON.stringify({
+          // Completed candles remain authoritative from authenticated REST.
+          write("event: candle\\ndata: " + JSON.stringify({
             symbol,
             timestamp: item.timestamp,
-          }) + "\n\n");
+          }) + "\\n\\n");
         } catch {
           // Discard invalid or unrelated upstream frames.
         }
