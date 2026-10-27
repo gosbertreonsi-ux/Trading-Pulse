@@ -15,6 +15,10 @@ import {
 import { movingAverageLine, movingAverageMarkers } from "@/lib/chartSignals";
 import { generateDemoCandles } from "@/lib/demoCandles";
 import { marketColors } from "@/lib/marketColors";
+import {
+  foldTick, overlayLiveMinutes, parseOpenMinute,
+  type LiveMinute, type LiveTick, type StoredOpenMinute,
+} from "@/lib/liveCandles";
 
 export type MarketSnapshot = {
   price: number;
@@ -43,6 +47,7 @@ type ApiCandle = {
 type ChartResponse = {
   candles?: ApiCandle[];
   data?: ApiCandle[] | { candles?: ApiCandle[] };
+  openCandle?: StoredOpenMinute | null;
 };
 
 type ValidCandle = {
@@ -264,6 +269,44 @@ export default function MarketChart({
     });
     const markerPlugin = createSeriesMarkers(series, []);
     let latestCandles: CandlestickData<Time>[] = [];
+    let completedCandles: CandlestickData<Time>[] = [];
+    let lastCompletedMinute = -Infinity;
+    const pendingMinutes = new Map<number, LiveMinute>();
+
+    function discardFinishedMinutes() {
+      for (const minute of pendingMinutes.keys()) {
+        if (minute <= lastCompletedMinute) pendingMinutes.delete(minute);
+      }
+      while (pendingMinutes.size > 3) {
+        pendingMinutes.delete(Math.min(...pendingMinutes.keys()));
+      }
+    }
+
+    // SMA signals are based on completed historical candles, never previews.
+    function renderDisplay() {
+      discardFinishedMinutes();
+      const shown = overlayLiveMinutes(
+        completedCandles, [...pendingMinutes.values()], timeframe, lastCompletedMinute
+      );
+      series.setData(shown);
+      if (!shown.length) {
+        setStatus("empty");
+        onSnapshot?.(null);
+        return 0;
+      }
+      const first = shown[0];
+      const last = shown[shown.length - 1];
+      setStatus("ready");
+      onSnapshot?.({
+        price: last.close,
+        changePercent: first.open > 0 ? ((last.close - first.open) / first.open) * 100 : null,
+        candleCount: shown.length,
+        lastUpdated: pendingMinutes.size
+          ? new Date(Math.max(...[...pendingMinutes.values()].map(m => m.lastTickAt))).toISOString()
+          : new Date(Number(last.time) * 1000).toISOString(),
+      });
+      return shown.length;
+    }
 
     const updateOverlay = (enabled: boolean) => {
       const colors = marketColors(document.documentElement.dataset.theme === "light" ? "light" : "dark");
