@@ -9,6 +9,7 @@ type AppShellProps = { children: ReactNode };
 const navigation = [
   { href: "/", label: "Dashboard", glyph: "◫", description: "Market overview" },
   { href: "/analytics", label: "Analytics", glyph: "▥", description: "Historical market analytics" },
+  { href: "/liquidity", label: "Liquidity", glyph: "≋", description: "Educational modeled order book" },
   { href: "/alerts", label: "Alerts", glyph: "♧", description: "Price alerts" },
   { href: "/studio", label: "AI Studio", glyph: "✳", description: "Build workspace" },
 ];
@@ -64,6 +65,7 @@ export default function AppShell({ children }: AppShellProps) {
   const isStudio = pathname.startsWith("/studio");
   const isAnalytics = pathname.startsWith("/analytics");
   const isAlerts = pathname.startsWith("/alerts");
+  const isLiquidity = pathname.startsWith("/liquidity");
 
   return (
     <div className="tp-app">
@@ -103,7 +105,7 @@ export default function AppShell({ children }: AppShellProps) {
         <header className="tp-topbar">
           <div className="tp-breadcrumb">
             <span>WORKSPACE</span><span className="tp-breadcrumb-divider">/</span>
-            <strong>{isStudio ? "AI Studio" : isAnalytics ? "Historical Analytics" : isAlerts ? "Price Alerts" : "Market Overview"}</strong>
+            <strong>{isStudio ? "AI Studio" : isAnalytics ? "Historical Analytics" : isLiquidity ? "Liquidity Model" : isAlerts ? "Price Alerts" : "Market Overview"}</strong>
           </div>
           <div className="tp-topbar-actions">
             <button type="button" className="tp-theme-switch" onClick={toggleTheme}
