@@ -86,6 +86,11 @@ async function inspectPage(viewport, screenshot) {
     }));
     assert.equal(darkColors.background, "rgb(24, 24, 24)");
     assert.equal(darkColors.panel, "rgb(24, 24, 24)");
+    const darkTrading = await page.evaluate(() => ({
+      bullish: getComputedStyle(document.querySelector(".br-chart-key i.positive")).backgroundColor,
+      bearish: getComputedStyle(document.querySelector(".br-chart-key i.negative")).backgroundColor,
+    }));
+    assert.deepEqual(darkTrading, { bullish: "rgb(24, 198, 122)", bearish: "rgb(224, 91, 82)" });
     await page.screenshot({ path: screenshot, fullPage: true });
 
     await page.getByRole("button", { name: "Switch to light mode" }).click();
@@ -99,6 +104,11 @@ async function inspectPage(viewport, screenshot) {
     }));
     assert.equal(lightColors.background, "rgb(255, 255, 255)");
     assert.equal(lightColors.panel, "rgb(255, 255, 255)");
+    const lightTrading = await page.evaluate(() => ({
+      bullish: getComputedStyle(document.querySelector(".br-chart-key i.positive")).backgroundColor,
+      bearish: getComputedStyle(document.querySelector(".br-chart-key i.negative")).backgroundColor,
+    }));
+    assert.deepEqual(lightTrading, { bullish: "rgb(15, 143, 87)", bearish: "rgb(200, 75, 69)" });
     assert.ok(lightColors.chart > Math.min(300, viewport.width * .7), "Theme change must preserve chart width");
     const lightScreenshot = screenshot.replace(".png", "-light.png");
     await page.screenshot({ path: lightScreenshot, fullPage: true });
