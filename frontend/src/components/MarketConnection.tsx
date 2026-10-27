@@ -32,9 +32,12 @@ export default function MarketConnection() {
 
   useEffect(() => {
     // No stored credentials or token value ever touches this component.
-    void check();
+    const initial = setTimeout(() => void check(), 0);
     const timer = setInterval(() => void check(), 30_000);
-    return () => clearInterval(timer);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(timer);
+    };
   }, [check]);
 
   const code = state.stage === "done" ? state.result.code : "checking";
