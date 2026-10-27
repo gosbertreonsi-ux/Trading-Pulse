@@ -45,6 +45,7 @@ function demoQuotes(): Record<string, Quote> {
     const first = candles[0];
     const last = candles[candles.length - 1];
     result[market.symbol] = {
+      symbol: market.symbol,
       price: last.close,
       change: ((last.close - first.open) / first.open) * 100,
       spark: candles.slice(-24).map(bar => bar.close),
