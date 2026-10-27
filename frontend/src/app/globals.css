@@ -738,6 +738,21 @@ textarea:focus-visible {
 }
 
 
+/* Shell geometry is required on desktop. Without display:grid the sidebar
+   occupies the first viewport and all dashboard content is pushed below it. */
+.tp-app {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: start;
+  width: 100%;
+  min-height: 100dvh;
+}
+.tp-app-main {
+  width: 100%;
+  min-width: 0;
+}
+.tp-content { display: block; width: 100%; }
+
 /* Broker terminal v2 — charcoal grading, data-first hierarchy, compact rail.
    Scope new dashboard styles under br- to preserve AI Studio's layout. */
 :root {
