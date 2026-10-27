@@ -6,6 +6,7 @@ import prismaPlugin from '../plugins/db'
 import redisPlugin from '../plugins/redis'
 import securityPlugin from '../plugins/security'
 import tradeRoutes from '../routes/trades'
+import alertRoutes from '../routes/alerts'
 import { aggregateCandlestick } from '../services/aggregator'
 
 // Requires disposable PostgreSQL and Redis services. The dedicated CI job
@@ -26,6 +27,7 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
     await server.register(redisPlugin)
     await server.register(securityPlugin)
     await server.register(tradeRoutes)
+    await server.register(alertRoutes)
     await server.ready()
 
     const mainTenant = 'integration-primary'
@@ -50,6 +52,32 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
       payload: { symbol, price: -1, quantity: 1, side: 'BUY' }
     })
     assert.equal(invalid.statusCode, 400, 'Invalid trade values are rejected')
+
+    const unauthAlert = await server.inject({ method: 'GET', url: '/api/v1/alerts' })
+    assert.equal(unauthAlert.statusCode, 401)
+    const workerPost = await server.inject({
+      method: 'POST', url: '/api/v1/alerts', headers: headers(worker),
+      payload: { symbol, direction: 'ABOVE', targetPrice: 105 }
+    })
+    assert.equal(workerPost.statusCode, 403, 'Workers may not create viewer alerts')
+    const badAlert = await server.inject({
+      method: 'POST', url: '/api/v1/alerts', headers: headers(viewer),
+      payload: { symbol, direction: 'SIDEWAYS', targetPrice: -1 }
+    })
+    assert.equal(badAlert.statusCode, 400)
+
+    const newAlert = await server.inject({
+      method: 'POST', url: '/api/v1/alerts', headers: headers(viewer),
+      payload: { symbol, direction: 'ABOVE', targetPrice: 105 }
+    })
+    assert.equal(newAlert.statusCode, 201, newAlert.body)
+    const alertId = (newAlert.json() as { data: { id: string } }).data.id
+    const otherTenantAlert = await server.inject({
+      method: 'POST', url: '/api/v1/alerts', headers: headers(otherViewer),
+      payload: { symbol, direction: 'BELOW', targetPrice: 120 }
+    })
+    assert.equal(otherTenantAlert.statusCode, 201)
+    const otherAlertId = (otherTenantAlert.json() as { data: { id: string } }).data.id
 
     const start = Math.floor((Date.now() - 180_000) / 60_000) * 60_000
     const points = [
@@ -112,6 +140,41 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
     })
     assert.equal(hiddenChart.statusCode, 200)
     assert.equal((hiddenChart.json() as { data: unknown[] }).data.length, 0, 'Other tenants cannot see candles')
+
+    const alertsResponse = await server.inject({
+      method: 'GET', url: '/api/v1/alerts', headers: headers(viewer)
+    })
+    assert.equal(alertsResponse.statusCode, 200)
+    const savedAlert = (alertsResponse.json() as {
+      data: Array<{ id: string; status: string; targetPrice: string; observedPrice: string; triggeredAt: string }>
+    }).data
+    assert.equal(savedAlert.length, 1, 'Tenant lists only their alerts')
+    assert.equal(savedAlert[0].id, alertId)
+    assert.equal(savedAlert[0].status, 'TRIGGERED', 'Threshold tripped at 106')
+    assert.equal(Number(savedAlert[0].observedPrice), 106)
+    assert.ok(savedAlert[0].triggeredAt)
+
+    const otherAlerts = await server.inject({
+      method: 'GET', url: '/api/v1/alerts', headers: headers(otherViewer)
+    })
+    assert.equal((otherAlerts.json() as { data: Array<{ id: string; status: string }> }).data.length, 1)
+    assert.equal((otherAlerts.json() as { data: Array<{ id: string; status: string }> }).data[0].status, 'ACTIVE')
+    assert.equal(await server.db.priceAlert.count({
+      where: { id: alertId, status: 'TRIGGERED' }
+    }), 1, 'Alert cannot be retriggered')
+
+    const crossDelete = await server.inject({
+      method: 'DELETE', url: `/api/v1/alerts/${otherAlertId}`,
+      headers: headers(viewer)
+    })
+    assert.equal(crossDelete.statusCode, 404, 'Other tenant alert cannot be deleted')
+    const remove = await server.inject({
+      method: 'DELETE', url: `/api/v1/alerts/${alertId}`,
+      headers: headers(viewer)
+    })
+    assert.equal(remove.statusCode, 200)
+    assert.equal(await server.db.priceAlert.count({ where: { id: alertId } }), 0)
+
   } finally {
     await server.close()
   }
