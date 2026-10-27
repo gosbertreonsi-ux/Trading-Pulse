@@ -60,6 +60,17 @@ async function inspectPage(viewport, screenshot) {
       };
     });
 
+    // The requested news-style typography must flow through the entire app:
+    // headings, body text and native form controls, on desktop and mobile.
+    const fonts = await page.evaluate(() => ({
+      body: getComputedStyle(document.body).fontFamily,
+      heading: getComputedStyle(document.querySelector(".br-head h1")).fontFamily,
+      button: getComputedStyle(document.querySelector("button")).fontFamily,
+    }));
+    for (const [element, family] of Object.entries(fonts)) {
+      assert.match(family, /Trebuchet MS/, element + " should inherit the news-style font");
+    }
+
     assert.equal(result.app.display, "grid", "App shell MUST use grid, otherwise sidebar fills the screen");
     assert.ok(result.heading.y < viewport.height * 0.65, "Dashboard title must appear in the first viewport: " + JSON.stringify(result));
     assert.ok(result.chart.width > Math.min(300, viewport.width * .7), "Chart must have usable width: " + JSON.stringify(result));
