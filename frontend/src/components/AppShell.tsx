@@ -8,6 +8,7 @@ type AppShellProps = { children: ReactNode };
 
 const navigation = [
   { href: "/", label: "Dashboard", glyph: "◫", description: "Market overview" },
+  { href: "/alerts", label: "Alerts", glyph: "♧", description: "Price alerts" },
   { href: "/studio", label: "AI Studio", glyph: "✳", description: "Build workspace" },
 ];
 
