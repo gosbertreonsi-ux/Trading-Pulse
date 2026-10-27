@@ -10,6 +10,7 @@ import alertRoutes from '../routes/alerts'
 import marketOverviewRoutes from '../routes/marketOverview'
 import historicalAnalyticsRoutes from '../routes/historicalAnalytics'
 import liquidityModelRoutes from '../routes/liquidity'
+import paperOrderRoutes from '../routes/paperOrders'
 import { aggregateCandlestick } from '../services/aggregator'
 
 // Requires disposable PostgreSQL and Redis services. The dedicated CI job
@@ -34,6 +35,7 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
     await server.register(marketOverviewRoutes)
     await server.register(historicalAnalyticsRoutes)
     await server.register(liquidityModelRoutes)
+    await server.register(paperOrderRoutes)
     await server.ready()
 
     const mainTenant = 'integration-primary'
@@ -43,6 +45,58 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
     const otherViewer = server.jwt.sign({ client: otherTenant, role: 'viewer' }, { expiresIn: '1h' })
     const symbol = 'BTCUSDT'
     const headers = (token: string) => ({ authorization: `Bearer ${token}` })
+
+    // No order can escape the in-memory paper sandbox. All API actions
+    // require a valid viewer tenant, and never write OHLCV or Trade rows.
+    const noPaperAuth = await server.inject({
+      method: 'GET', url: '/api/v1/paper/book?symbol=BTCUSDT'
+    })
+    assert.equal(noPaperAuth.statusCode, 401)
+    const workerPaper = await server.inject({
+      method: 'POST', url: '/api/v1/paper/orders',
+      headers: headers(worker),
+      payload: { symbol: 'BTCUSDT', side: 'BUY', price: 100, quantity: 2 }
+    })
+    assert.equal(workerPaper.statusCode, 403)
+    const paper = await server.inject({
+      method: 'POST', url: '/api/v1/paper/orders',
+      headers: headers(viewer),
+      payload: { symbol: 'BTCUSDT', side: 'BUY', price: 100, quantity: 2 }
+    })
+    assert.equal(paper.statusCode, 201, paper.body)
+    const paperBuy = paper.json() as { order: { id: string; status: string } }
+    assert.equal(paperBuy.order.status, 'OPEN')
+    const otherPaper = await server.inject({
+      method: 'GET', url: '/api/v1/paper/book?symbol=BTCUSDT',
+      headers: headers(otherViewer)
+    })
+    assert.equal((otherPaper.json() as { bids: unknown[] }).bids.length, 0)
+    const forbiddenCancel = await server.inject({
+      method: 'DELETE', url: '/api/v1/paper/orders/' + paperBuy.order.id,
+      headers: headers(otherViewer)
+    })
+    assert.equal(forbiddenCancel.statusCode, 404)
+    const paperSell = await server.inject({
+      method: 'POST', url: '/api/v1/paper/orders',
+      headers: headers(viewer),
+      payload: { symbol: 'BTCUSDT', side: 'SELL', price: 99, quantity: 1 }
+    })
+    assert.equal(paperSell.statusCode, 201, paperSell.body)
+    const paperFills = (paperSell.json() as { fills: Array<{ price: number; quantity: number }> }).fills
+    assert.deepEqual(paperFills.map(x => [x.price, x.quantity]), [[100, 1]])
+    const paperView = await server.inject({
+      method: 'GET', url: '/api/v1/paper/book?symbol=BTCUSDT',
+      headers: headers(viewer)
+    })
+    assert.equal((paperView.json() as { bids: Array<{ remainingQuantity: number }> })
+      .bids[0].remainingQuantity, 1)
+    const cancelPaper = await server.inject({
+      method: 'DELETE', url: '/api/v1/paper/orders/' + paperBuy.order.id,
+      headers: headers(viewer)
+    })
+    assert.equal(cancelPaper.statusCode, 200)
+    assert.equal(await server.db.trade.count(), 0,
+      'Paper fills must never become market tick Trade records')
 
     const noDepthToken = await server.inject({
       method: 'GET', url: '/api/v1/liquidity/model?symbol=BTCUSDT'
