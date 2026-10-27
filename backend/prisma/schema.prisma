@@ -31,3 +31,19 @@ model OHLCV {
 
   @@unique([clientId, symbol, timestamp]) // Ensures data isolation uniqueness
 }
+
+/** A one-shot threshold alert, scoped to the signed-in simulator tenant. */
+model PriceAlert {
+  id            String    @id @default(uuid())
+  clientId      String
+  symbol        String
+  direction     String
+  targetPrice   Decimal   @db.Decimal(18, 4)
+  status        String    @default("ACTIVE")
+  observedPrice Decimal?  @db.Decimal(18, 4)
+  createdAt     DateTime  @default(now())
+  triggeredAt   DateTime?
+
+  @@index([clientId, status, symbol])
+  @@index([clientId, createdAt])
+}
