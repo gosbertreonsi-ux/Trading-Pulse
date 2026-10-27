@@ -17,7 +17,7 @@ export type LiveTick = {
   timestamp: string;
 };
 
-type StoredOpenMinute = {
+export type StoredOpenMinute = {
   timestamp: string;
   open: number | string;
   high: number | string;
