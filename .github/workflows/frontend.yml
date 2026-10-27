@@ -37,5 +37,7 @@ jobs:
         run: npx tsc --noEmit
       - name: Test chart crossover indicators
         run: node --experimental-strip-types --test tests/chartSignals.test.mjs
+      - name: Test local diagnostic classifications
+        run: node --experimental-strip-types --test tests/devDiagnostics.test.mjs
       - name: Build frontend
         run: npm run build
