@@ -359,7 +359,16 @@ export default function MarketChart({
         });
 
         if (!hasLoadedData) {
-          chart.timeScale().fitContent();
+          if (source === "demo") {
+            // Show a readable, cinematic sample of recent bars initially;
+            // older demo candles remain accessible by panning left.
+            chart.timeScale().setVisibleLogicalRange({
+              from: Math.max(0, candles.length - 85),
+              to: candles.length + 5,
+            });
+          } else {
+            chart.timeScale().fitContent();
+          }
           hasLoadedData = true;
         } else if (previousRange) {
           chart.timeScale().setVisibleLogicalRange(previousRange);
