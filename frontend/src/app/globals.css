@@ -1338,3 +1338,16 @@ html, body { background:var(--background); color:var(--foreground); }
   .tp-theme-name { display:none; }
   .tp-theme-switch { min-width:36px; padding:6px; }
 }
+
+/* Final neutralization of legacy teal details from the pre-terminal UI. */
+.tp-nav-link .tp-nav-new { display:none; }
+.tp-chart-state-glyph {
+  background:var(--mono-surface);
+  border-color:var(--mono-border);
+  color:var(--mono-text);
+  box-shadow:none;
+}
+.tp-studio-note,.tp-studio-mode-note { background:var(--mono-surface); }
+.br-up { color:var(--mono-text)!important; }
+.br-down { color:var(--mono-soft)!important; }
+.br-asset-value small.br-down { color:var(--mono-soft)!important; }
