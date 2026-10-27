@@ -58,4 +58,4 @@ jobs:
       - name: Apply all committed migrations to disposable test database
         run: npx prisma migrate deploy
       - name: Test authenticated ingestion through real Postgres Redis and candle API
-        run: npx tsx --test src/integration/marketFlow.test.ts
+        run: npx tsx --test src/integration/marketFlow.test.ts src/integration/liveStream.test.ts
