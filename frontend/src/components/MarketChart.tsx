@@ -234,11 +234,11 @@ export default function MarketChart({
     chartRef.current = chart;
 
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#08edae",
-      downColor: "#ff4768",
+      upColor: "#f3f3f3",
+      downColor: "#7e7e7e",
       borderVisible: false,
-      wickUpColor: "#08edae",
-      wickDownColor: "#ff4768",
+      wickUpColor: "#f3f3f3",
+      wickDownColor: "#7e7e7e",
       wickVisible: true,
       priceLineVisible: true,
     });
@@ -246,7 +246,7 @@ export default function MarketChart({
     // All overlays are derived from historical completed candles, never
     // generated prices. BUY/SELL labels mark past SMA crossovers only.
     const fastLine = chart.addSeries(LineSeries, {
-      color: "#6dddd2",
+      color: "#ededed",
       lineWidth: 2,
       lineStyle: LineStyle.Dashed,
       priceLineVisible: false,
@@ -254,7 +254,7 @@ export default function MarketChart({
       crosshairMarkerVisible: false,
     });
     const slowLine = chart.addSeries(LineSeries, {
-      color: "#a987e5",
+      color: "#909090",
       lineWidth: 1,
       lineStyle: LineStyle.Dotted,
       priceLineVisible: false,
@@ -265,7 +265,15 @@ export default function MarketChart({
     let latestCandles: CandlestickData<Time>[] = [];
 
     const updateOverlay = (enabled: boolean) => {
-      markerPlugin.setMarkers(enabled ? movingAverageMarkers(latestCandles) : []);
+      const isLight = document.documentElement.dataset.theme === "light";
+      markerPlugin.setMarkers(enabled
+        ? movingAverageMarkers(latestCandles).map(marker => ({
+            ...marker,
+            color: marker.text === "BUY"
+              ? (isLight ? "#202020" : "#f1f1f1")
+              : (isLight ? "#777777" : "#999999"),
+          }))
+        : []);
       fastLine.setData(enabled ? movingAverageLine(latestCandles, 5) : []);
       slowLine.setData(enabled ? movingAverageLine(latestCandles, 12) : []);
     };
@@ -284,13 +292,14 @@ export default function MarketChart({
         },
       });
       series.applyOptions({
-        upColor: light ? "#078b65" : "#08edae",
-        wickUpColor: light ? "#078b65" : "#08edae",
-        downColor: light ? "#d83f58" : "#ff4768",
-        wickDownColor: light ? "#d83f58" : "#ff4768",
+        upColor: light ? "#202020" : "#f3f3f3",
+        wickUpColor: light ? "#202020" : "#f3f3f3",
+        downColor: light ? "#aaaaaa" : "#7e7e7e",
+        wickDownColor: light ? "#aaaaaa" : "#7e7e7e",
       });
-      fastLine.applyOptions({ color: light ? "#087c79" : "#6dddd2" });
-      slowLine.applyOptions({ color: light ? "#7153a7" : "#a987e5" });
+      fastLine.applyOptions({ color: light ? "#333333" : "#ededed" });
+      slowLine.applyOptions({ color: light ? "#888888" : "#909090" });
+      updateOverlay(signalsEnabled.current);
     };
     applyTheme();
     const themeObserver = new MutationObserver(applyTheme);
