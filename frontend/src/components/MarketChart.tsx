@@ -361,18 +361,15 @@ export default function MarketChart({
 
 
         let rawCandles: ApiCandle[];
+        let recovered: LiveMinute | null = null;
         if (source === "demo") {
-          // The explicit demo view makes NO backend/API calls.
           rawCandles = generateDemoCandles(symbol);
         } else {
           const response = await fetch(
             `/api/charts?symbol=${encodeURIComponent(symbol)}&limit=500`,
             { cache: "no-store" },
           );
-
-          if (!response.ok) {
-            throw new Error(`Chart request failed: ${response.status}`);
-          }
+          if (!response.ok) throw new Error(`Chart request failed: ${response.status}`);
 
           const payload = (await response.json()) as ChartResponse;
           rawCandles = Array.isArray(payload.candles)
@@ -382,46 +379,38 @@ export default function MarketChart({
               : Array.isArray(payload.data?.candles)
                 ? payload.data.candles
                 : [];
+          recovered = parseOpenMinute(payload.openCandle);
         }
 
         if (cancelled) return;
 
         const candles = groupCandles(rawCandles, timeframe);
-
-        if (candles.length === 0) {
-          latestCandles = [];
-          updateOverlay(false);
-          series.setData([]);
-          setStatus("empty");
-          onSnapshot?.(null);
-          return;
-        }
-
-        series.setData(candles);
+        const minuteBars = groupCandles(rawCandles, "1m");
+        lastCompletedMinute = minuteBars.length
+          ? Number(minuteBars[minuteBars.length - 1].time) : -Infinity;
+        completedCandles = candles;
         latestCandles = candles;
-        updateOverlay(signalsEnabled.current);
-        setStatus("ready");
-        const first = candles[0];
-        const last = candles[candles.length - 1];
-        onSnapshot?.({
-          price: last.close,
-          changePercent: first.open > 0 ? ((last.close - first.open) / first.open) * 100 : null,
-          candleCount: candles.length,
-          lastUpdated: new Date(Number(last.time) * 1000).toISOString(),
-        });
-
-        if (!hasLoadedData) {
-          if (source === "demo") {
-            // Show a readable, cinematic sample of recent bars initially;
-            // older demo candles remain accessible by panning left.
-            chart.timeScale().setVisibleLogicalRange({
-              from: Math.max(0, candles.length - 85),
-              to: candles.length + 5,
-            });
-          } else {
-            chart.timeScale().fitContent();
+        // A streamed tick may be newer than the REST response in flight.
+        if (recovered && recovered.time > lastCompletedMinute) {
+          const previous = pendingMinutes.get(recovered.time);
+          if (!previous || recovered.lastTickAt >= previous.lastTickAt) {
+            pendingMinutes.set(recovered.time, recovered);
           }
-          hasLoadedData = true;
+        }
+        updateOverlay(signalsEnabled.current);
+        const count = renderDisplay();
+        if (!hasLoadedData) {
+          if (count > 0) {
+            if (source === "demo") {
+              chart.timeScale().setVisibleLogicalRange({
+                from: Math.max(0, count - 85),
+                to: count + 5,
+              });
+            } else {
+              chart.timeScale().fitContent();
+            }
+            hasLoadedData = true;
+          }
         } else if (previousRange) {
           chart.timeScale().setVisibleLogicalRange(previousRange);
         }
