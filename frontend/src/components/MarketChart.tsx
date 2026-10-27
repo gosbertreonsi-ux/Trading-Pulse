@@ -457,6 +457,27 @@ export default function MarketChart({
       stream.addEventListener("candle", () => {
         if (!cancelled) void loadCandles();
       });
+      stream.addEventListener("tick", event => {
+        if (cancelled) return;
+        try {
+          const tick = JSON.parse(event.data) as LiveTick & { symbol?: string };
+          if (tick.symbol !== symbol || typeof tick.timestamp !== "string") return;
+          const milliseconds = Date.parse(tick.timestamp);
+          if (!Number.isFinite(milliseconds)) return;
+          const minute = Math.floor(milliseconds / 60_000) * 60;
+          if (minute <= lastCompletedMinute) return;
+          const next = foldTick(pendingMinutes.get(minute) ?? null, tick);
+          if (!next) return;
+          pendingMinutes.set(minute, next);
+          const count = renderDisplay();
+          if (!hasLoadedData && count > 0) {
+            chart.timeScale().fitContent();
+            hasLoadedData = true;
+          }
+        } catch {
+          // Discard malformed events; stored candles remain authoritative.
+        }
+      });
       stream.addEventListener("offline", () => {
         if (!cancelled) setStreamStatus("fallback");
       });
@@ -498,13 +519,13 @@ export default function MarketChart({
       </div>
       <div className={"tp-stream-state tp-stream-state-" + streamStatus} role="status" aria-live="polite">
         <span className="tp-stream-led" aria-hidden="true" />
-        {streamStatus === "demo" ? "SYNTHETIC DEMO · NO BACKEND" : streamStatus === "live" ? "LIVE CANDLE UPDATES" : streamStatus === "connecting" ? "CONNECTING TO STREAM" : "REST FALLBACK · 60S"}
+        {streamStatus === "demo" ? "SYNTHETIC DEMO · NO BACKEND" : streamStatus === "live" ? "LIVE · FORMING CANDLE" : streamStatus === "connecting" ? "CONNECTING TO STREAM" : "REST FALLBACK · 60S"}
       </div>
       {status !== "ready" && (
         <div className="tp-chart-state" role="status" aria-live="polite">
           <span className="tp-chart-state-glyph" aria-hidden="true">⌁</span>
           <strong>{status === "loading" ? (source === "demo" ? "Preparing chart preview…" : "Connecting to market data…") : status === "empty" ? "Waiting for candles" : "Chart data unavailable"}</strong>
-          <span>{status === "loading" ? (source === "demo" ? "Loading locally generated synthetic candles" : "Retrieving stored market candles") : status === "empty" ? "Start the simulator and wait for a completed one-minute candle." : "Check the backend, Redis, database and chart API."}</span>
+          <span>{status === "loading" ? (source === "demo" ? "Loading locally generated synthetic candles" : "Retrieving stored market candles") : status === "empty" ? "Start the simulator to receive ticks and form the current candle." : "Check the backend, Redis, database and chart API."}</span>
         </div>
       )}
     </div>
