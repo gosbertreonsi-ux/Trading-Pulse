@@ -1,6 +1,8 @@
 
 import { FastifyInstance } from 'fastify'
 import { evaluatePriceAlerts } from '../services/priceAlerts'
+import { broadcastToCharts } from './streams'
+import { loadOpenMinute } from '../services/openCandle'
 
 const tradeIngestionSchema = {
   body: {
@@ -73,6 +75,15 @@ export default async function tradeRoutes(fastify: FastifyInstance) {
         // Persist the tick first: PostgreSQL is the durable market-data source.
         // Aggregation can recover these trades after a Redis interruption.
         const saved = await fastify.db.trade.create({ data: tickData })
+
+        // Emit only after a successful PostgreSQL commit, tenant-scoped.
+        broadcastToCharts('TICK', {
+          clientId,
+          symbol,
+          price,
+          quantity,
+          timestamp: saved.timestamp.toISOString()
+        })
 
         // Alert evaluation is best-effort and follows durable trade storage.
         // An alert-service outage must not imply the trade was rejected.
@@ -185,11 +196,14 @@ export default async function tradeRoutes(fastify: FastifyInstance) {
           take: limit
         })
 
+        // Unfinished minute is separate from the authoritative completed OHLCV.
+        const openCandle = await loadOpenMinute(fastify, clientId, symbol)
         return reply.send({
           success: true,
           tenant: clientId,
           symbol,
-          data: candles.reverse()
+          data: candles.reverse(),
+          openCandle
         })
       } catch (error) {
         fastify.log.error(error)
