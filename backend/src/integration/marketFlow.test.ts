@@ -13,6 +13,13 @@ import { aggregateCandlestick } from '../services/aggregator'
 test('authenticated ingestion persists and aggregates across tenant boundaries', {
   skip: process.env.RUN_TRADING_PULSE_INTEGRATION !== '1'
 }, async () => {
+  // Refuse to mutate a developer database when this test is run manually.
+  const database = new URL(process.env.DATABASE_URL ?? 'postgresql://localhost/invalid')
+  if (!['127.0.0.1', 'localhost', '::1'].includes(database.hostname) ||
+      database.pathname !== '/trading_pulse_test') {
+    throw new Error('Integration tests require a disposable local trading_pulse_test database')
+  }
+
   const server = Fastify({ logger: false })
   try {
     await server.register(prismaPlugin)
