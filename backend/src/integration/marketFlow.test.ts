@@ -9,6 +9,7 @@ import tradeRoutes from '../routes/trades'
 import alertRoutes from '../routes/alerts'
 import marketOverviewRoutes from '../routes/marketOverview'
 import historicalAnalyticsRoutes from '../routes/historicalAnalytics'
+import liquidityModelRoutes from '../routes/liquidity'
 import { aggregateCandlestick } from '../services/aggregator'
 
 // Requires disposable PostgreSQL and Redis services. The dedicated CI job
@@ -32,6 +33,7 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
     await server.register(alertRoutes)
     await server.register(marketOverviewRoutes)
     await server.register(historicalAnalyticsRoutes)
+    await server.register(liquidityModelRoutes)
     await server.ready()
 
     const mainTenant = 'integration-primary'
@@ -41,6 +43,30 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
     const otherViewer = server.jwt.sign({ client: otherTenant, role: 'viewer' }, { expiresIn: '1h' })
     const symbol = 'BTCUSDT'
     const headers = (token: string) => ({ authorization: `Bearer ${token}` })
+
+    const noDepthToken = await server.inject({
+      method: 'GET', url: '/api/v1/liquidity/model?symbol=BTCUSDT'
+    })
+    assert.equal(noDepthToken.statusCode, 401)
+    const unsupportedDepth = await server.inject({
+      method: 'GET', url: '/api/v1/liquidity/model?symbol=INVALID', headers: headers(viewer)
+    })
+    assert.equal(unsupportedDepth.statusCode, 400)
+    const emptyDepth = await server.inject({
+      method: 'GET', url: '/api/v1/liquidity/model?symbol=BTCUSDT',
+      headers: headers(otherViewer)
+    })
+    assert.equal(emptyDepth.statusCode, 200)
+    const emptyModel = emptyDepth.json() as {
+      modelType: string; observed: { lastPrice: number | null; sampleCount: number };
+      bids: unknown[]; asks: unknown[]; bestBid: number | null
+    }
+    assert.equal(emptyModel.modelType, 'EDUCATIONAL_SYNTHETIC_DEPTH')
+    assert.equal(emptyModel.observed.sampleCount, 0)
+    assert.equal(emptyModel.observed.lastPrice, null)
+    assert.equal(emptyModel.bestBid, null)
+    assert.deepEqual(emptyModel.bids, [])
+    assert.deepEqual(emptyModel.asks, [])
 
     const noHistoryToken = await server.inject({ method: 'GET', url: '/api/v1/analytics/history?symbol=BTCUSDT' })
     assert.equal(noHistoryToken.statusCode, 401, 'Historical candles require authentication')
@@ -131,6 +157,31 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
       const data = written.json() as { success: boolean; id: string; cached: boolean }
       assert.equal(data.success, true)
       assert.equal(data.cached, true, 'Redis hot cache is reachable')
+
+      const depthResponse = await server.inject({
+        method: 'GET', url: '/api/v1/liquidity/model?symbol=BTCUSDT',
+        headers: headers(viewer)
+      })
+      assert.equal(depthResponse.statusCode, 200, depthResponse.body)
+      const depth = depthResponse.json() as {
+        modelType: string; observed: {
+          lastPrice: number; sampleCount: number; buyQuantity: number; sellQuantity: number
+        };
+        bids: Array<{ price: number; quantity: number }>;
+        asks: Array<{ price: number; quantity: number }>;
+      }
+      assert.equal(depth.modelType, 'EDUCATIONAL_SYNTHETIC_DEPTH')
+      assert.equal(depth.observed.lastPrice, point.price)
+      assert.ok(depth.observed.sampleCount >= 1)
+      assert.equal(depth.bids.length, 10)
+      assert.equal(depth.asks.length, 10)
+      assert.ok(depth.asks[0].price > depth.bids[0].price)
+      const alienDepth = await server.inject({
+        method: 'GET', url: '/api/v1/liquidity/model?symbol=BTCUSDT',
+        headers: headers(otherViewer)
+      })
+      assert.equal((alienDepth.json() as { observed: { lastPrice: number | null } })
+        .observed.lastPrice, null, 'Modeled depth cannot read another tenant trade')
 
       const quotesResponse = await server.inject({
         method: 'GET', url: '/api/v1/markets/overview', headers: headers(viewer)
