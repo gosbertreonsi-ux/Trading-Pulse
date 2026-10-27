@@ -80,8 +80,9 @@ export default async function tradeRoutes(fastify: FastifyInstance) {
         broadcastToCharts('TICK', {
           clientId,
           symbol,
-          price,
-          quantity,
+          // Match PostgreSQL DECIMAL(18,4), not unrounded request values.
+          price: Number(saved.price),
+          quantity: Number(saved.quantity),
           timestamp: saved.timestamp.toISOString()
         })
 
