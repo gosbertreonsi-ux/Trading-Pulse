@@ -76,8 +76,64 @@ async function inspectPage(viewport, screenshot) {
       assert.ok(result.chart.width >= viewport.width - 48, "Mobile chart must fit nearly entire screen");
     }
 
+    // Confirm the full monochrome appearance is interactive and persistent,
+    // without changing the previously repaired responsive grid geometry.
+    assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+    const darkColors = await page.evaluate(() => ({
+      background: getComputedStyle(document.querySelector(".br-chart-canvas")).backgroundColor,
+      panel: getComputedStyle(document.querySelector(".br-watchlist")).backgroundColor,
+      text: getComputedStyle(document.querySelector(".br-head h1")).color,
+    }));
+    assert.equal(darkColors.background, "rgb(24, 24, 24)");
+    assert.equal(darkColors.panel, "rgb(24, 24, 24)");
     await page.screenshot({ path: screenshot, fullPage: true });
-    console.log("PASS " + JSON.stringify({ viewport, headingY: result.heading.y, chartWidth: result.chart.width, screenshot }));
+
+    await page.getByRole("button", { name: "Switch to light mode" }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.theme === "light");
+    assert.equal(await page.getByRole("button", { name: "Switch to dark mode" }).count(), 1);
+    const lightColors = await page.evaluate(() => ({
+      background: getComputedStyle(document.querySelector(".br-chart-canvas")).backgroundColor,
+      panel: getComputedStyle(document.querySelector(".br-watchlist")).backgroundColor,
+      page: getComputedStyle(document.body).backgroundColor,
+      chart: document.querySelector(".br-chart-canvas").getBoundingClientRect().width,
+    }));
+    assert.equal(lightColors.background, "rgb(255, 255, 255)");
+    assert.equal(lightColors.panel, "rgb(255, 255, 255)");
+    assert.ok(lightColors.chart > Math.min(300, viewport.width * .7), "Theme change must preserve chart width");
+    const lightScreenshot = screenshot.replace(".png", "-light.png");
+    await page.screenshot({ path: lightScreenshot, fullPage: true });
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => document.documentElement.dataset.theme === "light");
+    assert.equal(await page.getByRole("button", { name: "Switch to dark mode" }).count(), 1, "Theme must survive reload");
+    assert.equal(await page.locator(".br-head h1").isVisible(), true);
+    await page.getByRole("button", { name: "Switch to dark mode" }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
+    console.log("PASS " + JSON.stringify({ viewport, headingY: result.heading.y, chartWidth: result.chart.width, darkColors, lightColors, screenshots: [screenshot, lightScreenshot] }));
+  } finally {
+    await page.close();
+  }
+}
+
+async function inspectStudio() {
+  const page = await browser.newPage({ viewport: { width: 1390, height: 780 } });
+  try {
+    const response = await page.goto(origin + "/studio", { waitUntil: "domcontentloaded" });
+    assert.equal(response?.status(), 200);
+    await page.locator(".tp-prompt-input").waitFor({ state: "visible" });
+    assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+    const darkPanel = await page.locator(".tp-studio-panel").first().evaluate(
+      element => getComputedStyle(element).backgroundColor,
+    );
+    assert.equal(darkPanel, "rgb(24, 24, 24)", "Studio panel should inherit the dark monochrome palette");
+    await page.getByRole("button", { name: "Switch to light mode" }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.theme === "light");
+    const lightPanel = await page.locator(".tp-studio-panel").first().evaluate(
+      element => getComputedStyle(element).backgroundColor,
+    );
+    assert.equal(lightPanel, "rgb(255, 255, 255)", "Studio panel should inherit the light monochrome palette");
+    await page.screenshot({ path: "studio-desktop-light.png", fullPage: true });
+    console.log("PASS studio " + JSON.stringify({ darkPanel, lightPanel }));
   } finally {
     await page.close();
   }
@@ -88,6 +144,7 @@ try {
   browser = await chromium.launch({ channel: "chrome", headless: true, args: ["--no-sandbox"] });
   await inspectPage({ width: 1390, height: 780 }, "broker-desktop.png");
   await inspectPage({ width: 390, height: 844 }, "broker-mobile.png");
+  await inspectStudio();
 } finally {
   if (browser) await browser.close();
   app.kill("SIGTERM");

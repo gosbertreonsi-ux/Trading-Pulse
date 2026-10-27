@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 
 type AppShellProps = { children: ReactNode };
 
@@ -11,7 +11,52 @@ const navigation = [
   { href: "/studio", label: "AI Studio", glyph: "✳", description: "Build workspace" },
 ];
 
+
+type Theme = "dark" | "light";
+const THEME_KEY = "trading-pulse-color-mode";
+const THEME_EVENT = "trading-pulse-theme-change";
+
+function subscribeTheme(notify: () => void): () => void {
+  window.addEventListener("storage", notify);
+  window.addEventListener(THEME_EVENT, notify);
+  return () => {
+    window.removeEventListener("storage", notify);
+    window.removeEventListener(THEME_EVENT, notify);
+  };
+}
+
+function savedTheme(): Theme {
+  try {
+    return window.localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
+function serverTheme(): Theme {
+  return "dark";
+}
+
 export default function AppShell({ children }: AppShellProps) {
+  const theme = useSyncExternalStore(subscribeTheme, savedTheme, serverTheme);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+  }, [theme]);
+
+  function toggleTheme() {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    try {
+      window.localStorage.setItem(THEME_KEY, next);
+    } catch {
+      // Private browsing may block persistence; this tab can still switch.
+    }
+    document.documentElement.dataset.theme = next;
+    document.documentElement.style.colorScheme = next;
+    window.dispatchEvent(new Event(THEME_EVENT));
+  }
+
   const pathname = usePathname();
 
   const isStudio = pathname.startsWith("/studio");
@@ -57,6 +102,12 @@ export default function AppShell({ children }: AppShellProps) {
             <strong>{isStudio ? "AI Studio" : "Market Overview"}</strong>
           </div>
           <div className="tp-topbar-actions">
+            <button type="button" className="tp-theme-switch" onClick={toggleTheme}
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              aria-pressed={theme === "light"}>
+              <span className="tp-theme-symbol" aria-hidden="true">{theme === "dark" ? "☼" : "☾"}</span>
+              <span className="tp-theme-name">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+            </button>
             <span className="tp-topbar-label"><span className="tp-dot" /> DEVELOPMENT BUILD</span>
             <span className="tp-avatar" title="Local workspace">TP</span>
           </div>
