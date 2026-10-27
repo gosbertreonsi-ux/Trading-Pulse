@@ -90,11 +90,32 @@ export async function checkMarketData(
       };
     }
 
-    const payload: unknown = await response.json();
-    if (!payload || typeof payload !== "object") throw new Error("Unexpected chart response");
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      return {
+        code: "backend-error",
+        title: "Invalid chart response",
+        detail: "Fastify returned an unreadable JSON response. Check its chart route and server logs.",
+      };
+    }
+    if (!payload || typeof payload !== "object") {
+      return {
+        code: "backend-error",
+        title: "Invalid chart response",
+        detail: "The backend returned an unexpected response shape. Check the Fastify chart route.",
+      };
+    }
     const record = payload as { data?: unknown; candles?: unknown };
     const list = Array.isArray(record.data) ? record.data : record.candles;
-    if (!Array.isArray(list)) throw new Error("Missing chart data array");
+    if (!Array.isArray(list)) {
+      return {
+        code: "backend-error",
+        title: "Invalid chart response",
+        detail: "The backend did not return a candle data array. Check the Fastify chart route.",
+      };
+    }
 
     if (list.length === 0) {
       return {
