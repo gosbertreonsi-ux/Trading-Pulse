@@ -1351,3 +1351,27 @@ html, body { background:var(--background); color:var(--foreground); }
 .br-up { color:var(--mono-text)!important; }
 .br-down { color:var(--mono-soft)!important; }
 .br-asset-value small.br-down { color:var(--mono-soft)!important; }
+
+
+/* Trading semantics only: retain monochrome Light/Dark interface chrome.
+   Color is reserved for observed bullish/bearish market movement. */
+:root[data-theme="dark"] {
+  --market-up: #18c67a;
+  --market-down: #e05b52;
+}
+:root[data-theme="light"] {
+  --market-up: #0f8f57;
+  --market-down: #c84b45;
+}
+.br-up,
+.br-asset-value small.br-up {
+  color: var(--market-up) !important;
+}
+.br-down,
+.br-asset-value small.br-down {
+  color: var(--market-down) !important;
+}
+.br-spark.up { color: var(--market-up); }
+.br-spark.down { color: var(--market-down); }
+.br-chart-key i.positive { background: var(--market-up); }
+.br-chart-key i.negative { background: var(--market-down); }
