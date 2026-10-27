@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 
-type StreamEvent = 'ALERT' | 'CANDLE'
+type StreamEvent = 'ALERT' | 'CANDLE' | 'TICK'
 type ClientSocket = {
   socket: { readyState: number; send(message: string): void }
   clientId: string
