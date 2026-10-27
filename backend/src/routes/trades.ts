@@ -1,5 +1,6 @@
 
 import { FastifyInstance } from 'fastify'
+import { evaluatePriceAlerts } from '../services/priceAlerts'
 
 const tradeIngestionSchema = {
   body: {
@@ -72,6 +73,14 @@ export default async function tradeRoutes(fastify: FastifyInstance) {
         // Persist the tick first: PostgreSQL is the durable market-data source.
         // Aggregation can recover these trades after a Redis interruption.
         const saved = await fastify.db.trade.create({ data: tickData })
+
+        // Alert evaluation is best-effort and follows durable trade storage.
+        // An alert-service outage must not imply the trade was rejected.
+        try {
+          await evaluatePriceAlerts(fastify, clientId, symbol, price)
+        } catch (alertError) {
+          fastify.log.warn({ err: alertError, symbol }, 'Trade persisted; price alert evaluation delayed')
+        }
 
         // Redis is a bounded, best-effort hot cache for predictive analytics.
         // A cache outage must not erase an already committed trade.
