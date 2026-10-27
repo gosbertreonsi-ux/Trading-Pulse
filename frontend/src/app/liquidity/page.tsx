@@ -119,7 +119,7 @@ export default function LiquidityPage() {
         if (!controller.signal.aborted) setStreamState("fallback");
       }, 0);
       return () => {
-        controller.abort(); stream?.close();
+        controller.abort();
         clearTimeout(startup); clearInterval(poll); clearTimeout(markFallback);
       };
     }
