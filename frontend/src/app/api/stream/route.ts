@@ -133,9 +133,9 @@ export async function GET(request: NextRequest) {
 
             // Accept only tenant-filtered upstream records for this symbol.
             // Forward essential tick fields, never claims or auth headers.
-            write("event: tick\\ndata: " + JSON.stringify({
+            write("event: tick\ndata: " + JSON.stringify({
               symbol, price, quantity, timestamp,
-            }) + "\\n\\n");
+            }) + "\n\n");
             return;
           }
 
@@ -146,10 +146,10 @@ export async function GET(request: NextRequest) {
           ) return;
 
           // Completed candles remain authoritative from authenticated REST.
-          write("event: candle\\ndata: " + JSON.stringify({
+          write("event: candle\ndata: " + JSON.stringify({
             symbol,
             timestamp: item.timestamp,
-          }) + "\\n\\n");
+          }) + "\n\n");
         } catch {
           // Discard invalid or unrelated upstream frames.
         }
