@@ -6,6 +6,7 @@ import prismaPlugin from './plugins/db'
 import redisPlugin from './plugins/redis'
 import securityPlugin from './plugins/security'
 import tradeRoutes from './routes/trades'
+import alertRoutes from './routes/alerts'
 import streamingRoutes from './routes/streams'
 import { aggregateCandlestick } from './services/aggregator'
 import { evaluateMarketTrend } from './services/predictiveCore'
@@ -21,6 +22,7 @@ async function start(): Promise<void> {
   await fastify.register(redisPlugin)
   await fastify.register(securityPlugin)
   await fastify.register(tradeRoutes)
+  await fastify.register(alertRoutes)
   await fastify.register(streamingRoutes)
 
   let aggregating = false
