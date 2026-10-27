@@ -136,6 +136,42 @@ async function inspectPage(viewport, screenshot) {
   }
 }
 
+async function inspectConnectedWatchlist() {
+  const page = await browser.newPage({ viewport: { width: 1390, height: 780 } });
+  try {
+    // Mock a correctly authenticated server response without introducing
+    // a browser token or requiring a database in the frontend Chrome job.
+    await page.route("**/api/markets", async route => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        success: true,
+        window: "last-24-ticks",
+        quotes: [
+          { symbol: "BTCUSDT", price: 62000, changePercent: 3.333, spark: [60000, 62000], lastUpdated: "2026-10-27T12:30:02Z" },
+          { symbol: "ETHUSDT", price: 2490, changePercent: -0.4, spark: [2500, 2490], lastUpdated: "2026-10-27T12:30:02Z" },
+          { symbol: "SOLUSDT", price: null, changePercent: null, spark: [], lastUpdated: null },
+        ],
+      }) });
+    });
+    const response = await page.goto(origin, { waitUntil: "domcontentloaded" });
+    assert.equal(response?.status(), 200);
+    await page.waitForFunction(() => {
+      const prices = Array.from(document.querySelectorAll(".br-asset-value strong")).map(x => x.textContent);
+      return prices.includes("62,000.00") && prices.includes("2,490.00");
+    }, { timeout: 15000 });
+    const rows = page.locator(".br-asset");
+    assert.equal(await rows.count(), 3);
+    assert.equal(await rows.nth(0).locator(".br-asset-value strong").textContent(), "62,000.00");
+    assert.equal(await rows.nth(1).locator(".br-asset-value strong").textContent(), "2,490.00");
+    assert.equal(await rows.nth(2).locator(".br-asset-value strong").textContent(), "—", "No trades means no fabricated SOL quote");
+    assert.equal(await rows.nth(0).locator(".br-asset-value small").textContent(), "+3.33%");
+    assert.equal(await rows.nth(1).locator(".br-asset-value small").textContent(), "-0.40%");
+    assert.equal(await page.locator(".br-watchlist-note").textContent().then(text => text.includes("not 24h")), true);
+    console.log("PASS authenticated watchlist rows and empty-market integrity");
+  } finally {
+    await page.close();
+  }
+}
+
 async function inspectAlerts() {
   const page = await browser.newPage({ viewport: { width: 1390, height: 780 } });
   try {
@@ -186,6 +222,7 @@ try {
   await inspectPage({ width: 390, height: 844 }, "broker-mobile.png");
   await inspectStudio();
   await inspectAlerts();
+  await inspectConnectedWatchlist();
 } finally {
   if (browser) await browser.close();
   app.kill("SIGTERM");

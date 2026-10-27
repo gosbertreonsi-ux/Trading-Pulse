@@ -7,6 +7,7 @@ import redisPlugin from '../plugins/redis'
 import securityPlugin from '../plugins/security'
 import tradeRoutes from '../routes/trades'
 import alertRoutes from '../routes/alerts'
+import marketOverviewRoutes from '../routes/marketOverview'
 import { aggregateCandlestick } from '../services/aggregator'
 
 // Requires disposable PostgreSQL and Redis services. The dedicated CI job
@@ -28,6 +29,7 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
     await server.register(securityPlugin)
     await server.register(tradeRoutes)
     await server.register(alertRoutes)
+    await server.register(marketOverviewRoutes)
     await server.ready()
 
     const mainTenant = 'integration-primary'
@@ -37,6 +39,19 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
     const otherViewer = server.jwt.sign({ client: otherTenant, role: 'viewer' }, { expiresIn: '1h' })
     const symbol = 'BTCUSDT'
     const headers = (token: string) => ({ authorization: `Bearer ${token}` })
+
+    const noMarketToken = await server.inject({ method: 'GET', url: '/api/v1/markets/overview' })
+    assert.equal(noMarketToken.statusCode, 401, 'Market quotes require a viewer JWT')
+    const emptyQuotes = await server.inject({
+      method: 'GET', url: '/api/v1/markets/overview', headers: headers(otherViewer)
+    })
+    assert.equal(emptyQuotes.statusCode, 200)
+    const emptyData = (emptyQuotes.json() as {
+      quotes: Array<{ symbol: string; price: number | null; spark: number[] }>
+    }).quotes
+    assert.deepEqual(emptyData.map(quote => quote.symbol), ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'])
+    assert.ok(emptyData.every(quote => quote.price === null && quote.spark.length === 0),
+      'No tenant trades means no fabricated prices')
 
     const unauth = await server.inject({ method: 'GET', url: '/api/v1/charts?symbol=BTCUSDT' })
     assert.equal(unauth.statusCode, 401, 'Unauthenticated market data is rejected')
@@ -95,6 +110,30 @@ test('authenticated ingestion persists and aggregates across tenant boundaries',
       const data = written.json() as { success: boolean; id: string; cached: boolean }
       assert.equal(data.success, true)
       assert.equal(data.cached, true, 'Redis hot cache is reachable')
+
+      const quotesResponse = await server.inject({
+        method: 'GET', url: '/api/v1/markets/overview', headers: headers(viewer)
+      })
+      assert.equal(quotesResponse.statusCode, 200)
+      const quotesPayload = quotesResponse.json() as {
+        window: string;
+        quotes: Array<{ symbol: string; price: number | null; changePercent: number | null; spark: number[] }>
+      }
+      assert.equal(quotesPayload.window, 'last-24-ticks')
+      assert.equal(quotesPayload.quotes[0].symbol, symbol)
+      assert.equal(quotesPayload.quotes[0].price, point.price,
+        'Authenticated overview uses the latest persisted tick')
+      assert.equal(quotesPayload.quotes[1].price, null, 'No invented ETH price')
+      assert.equal(quotesPayload.quotes[2].price, null, 'No invented SOL price')
+      assert.equal(quotesPayload.quotes[0].changePercent === null, quotesPayload.quotes[0].spark.length < 2)
+
+      const otherQuotes = await server.inject({
+        method: 'GET', url: '/api/v1/markets/overview', headers: headers(otherViewer)
+      })
+      assert.ok((otherQuotes.json() as {
+        quotes: Array<{ price: number | null }>
+      }).quotes.every(quote => quote.price === null),
+        'Other tenants cannot see our last simulated trade')
 
       // The unfinished current-minute candle comes from tenant-scoped,
       // durable trades before the worker finalizes any OHLCV rows.

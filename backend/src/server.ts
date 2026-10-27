@@ -8,6 +8,7 @@ import securityPlugin from './plugins/security'
 import tradeRoutes from './routes/trades'
 import alertRoutes from './routes/alerts'
 import streamingRoutes from './routes/streams'
+import marketOverviewRoutes from './routes/marketOverview'
 import { aggregateCandlestick } from './services/aggregator'
 import { evaluateMarketTrend } from './services/predictiveCore'
 
@@ -24,6 +25,7 @@ async function start(): Promise<void> {
   await fastify.register(tradeRoutes)
   await fastify.register(alertRoutes)
   await fastify.register(streamingRoutes)
+  await fastify.register(marketOverviewRoutes)
 
   let aggregating = false
   let predicting = false

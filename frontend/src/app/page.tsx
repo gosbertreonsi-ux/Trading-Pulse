@@ -6,9 +6,13 @@ import AppShell from "@/components/AppShell";
 import MarketChart, { type MarketSnapshot } from "@/components/MarketChart";
 import MarketConnection from "@/components/MarketConnection";
 import { generateDemoCandles } from "@/lib/demoCandles";
+import {
+  applyWatchTick, reconcileSnapshot, WATCH_SYMBOLS,
+  type WatchQuote, type WatchSnapshotItem, type WatchTick,
+} from "@/lib/liveWatchlist";
 
 type Market = { symbol: string; ticker: string; name: string; icon: string };
-type Quote = { price: number; change: number; spark: number[] };
+type Quote = WatchQuote;
 type Source = "demo" | "backend";
 
 const markets: Market[] = [
@@ -41,9 +45,11 @@ function demoQuotes(): Record<string, Quote> {
     const first = candles[0];
     const last = candles[candles.length - 1];
     result[market.symbol] = {
+      symbol: market.symbol,
       price: last.close,
       change: ((last.close - first.open) / first.open) * 100,
       spark: candles.slice(-24).map(bar => bar.close),
+      lastUpdated: new Date(now).toISOString(),
     };
   }
   return result;
@@ -82,6 +88,60 @@ export default function Home() {
     return () => { clearTimeout(first); clearInterval(timer); };
   }, [source]);
 
+  useEffect(() => {
+    if (source !== "backend") return;
+    let cancelled = false;
+    const supported = new Set<string>(WATCH_SYMBOLS);
+    const controller = new AbortController();
+
+    async function loadOverview() {
+      try {
+        const response = await fetch("/api/markets", {
+          cache: "no-store",
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]),
+        });
+        if (!response.ok) throw new Error("Market overview request failed: " + response.status);
+        const data = (await response.json()) as {
+          success: boolean; quotes: WatchSnapshotItem[];
+        };
+        if (!cancelled && data.success && Array.isArray(data.quotes)) {
+          setQuotes(previous => reconcileSnapshot(previous, data.quotes));
+        }
+      } catch (error) {
+        if (!cancelled) console.warn("Simulated watchlist refresh unavailable", error);
+      }
+    }
+
+    const first = setTimeout(() => void loadOverview(), 0);
+    const timer = setInterval(() => void loadOverview(), 30_000);
+    // The existing local-only SSE bridge keeps viewer credentials server-side.
+    const stream = process.env.NODE_ENV === "development"
+      ? new EventSource("/api/stream?symbol=ALL") : null;
+    stream?.addEventListener("ready", () => { if (!cancelled) void loadOverview(); });
+    stream?.addEventListener("tick", event => {
+      if (cancelled) return;
+      try {
+        const tick = JSON.parse(event.data) as WatchTick;
+        if (!tick || !supported.has(tick.symbol)) return;
+        setQuotes(previous => {
+          const next = applyWatchTick(previous[tick.symbol], tick);
+          return next && next !== previous[tick.symbol]
+            ? { ...previous, [tick.symbol]: next } : previous;
+        });
+      } catch {
+        // Untrusted/malformed network frames must never create market prices.
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(first);
+      clearInterval(timer);
+      stream?.close();
+    };
+  }, [source]);
+
   const selected = markets.find(market => market.symbol === selectedSymbol) ?? markets[0];
   const filtered = useMemo(
     () => markets.filter(market =>
@@ -101,6 +161,7 @@ export default function Home() {
     if (next === source) return;
     setSource(next);
     setSnapshot(null);
+    setQuotes({});
   }
 
   const latestPrice = snapshot?.price;
@@ -150,20 +211,20 @@ export default function Home() {
               <input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search markets" aria-label="Search watchlist"/>
               <kbd>/</kbd>
             </label>
-            <div className="br-watchlist-header" aria-hidden="true"><span>ASSET</span><span>LAST / RANGE CHANGE</span></div>
+            <div className="br-watchlist-header" aria-hidden="true"><span>ASSET</span><span>{source === "demo" ? "LAST / RANGE CHANGE" : "LAST / RECENT-TICK CHANGE"}</span></div>
             <div className="br-assets">
               {filtered.map(market => {
                 const selectedRow = market.symbol === selectedSymbol;
-                const demo = source === "demo" ? quotes[market.symbol] : undefined;
-                const price = source === "demo" ? demo?.price : selectedRow ? latestPrice : undefined;
-                const movement = source === "demo" ? demo?.change : selectedRow ? change : null;
+                const quote = quotes[market.symbol];
+                const price = quote?.price;
+                const movement = quote?.change;
                 const rise = (movement ?? 0) >= 0;
                 return (
                   <button className={"br-asset" + (selectedRow ? " selected" : "")} type="button" key={market.symbol}
                     onClick={() => selectMarket(market.symbol)} aria-pressed={selectedRow}>
                     <span className={"br-asset-icon " + market.ticker.toLowerCase()} aria-hidden="true">{market.icon}</span>
                     <span className="br-asset-info"><strong>{market.ticker}<em>/USDT</em></strong><small>{market.name}</small></span>
-                    <Sparkline points={demo?.spark} rising={rise}/>
+                    <Sparkline points={quote?.spark} rising={rise}/>
                     <span className="br-asset-value"><strong>{money(price)}</strong><small className={movement == null ? "" : rise ? "br-up" : "br-down"}>{percent(movement)}</small></span>
                   </button>
                 );
@@ -172,7 +233,7 @@ export default function Home() {
             </div>
             <div className="br-watchlist-note"><span className="br-note-icon">ⓘ</span> {source === "demo"
               ? "All preview quotes are synthetic."
-              : "Only selected-market quotes are loaded. No invented watchlist prices."}</div>
+              : "All prices come from stored simulator ticks. Changes compare up to 24 recent ticks, not 24h."}</div>
             <div className="br-watchlist-footer"><span className="br-status-circle"/> {markets.length} SIMULATED ASSETS <span>TRADING PULSE</span></div>
           </aside>
 
