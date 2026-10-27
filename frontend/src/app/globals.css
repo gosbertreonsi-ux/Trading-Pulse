@@ -641,3 +641,98 @@ textarea:focus-visible {
   font-weight: 750;
 }
 .tp-connection-refresh:hover { border-color: var(--accent); }
+
+
+/* Explicit preview mode stays unmistakable within the black workstation. */
+.tp-source-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(105deg, rgba(33, 168, 140, .09), #080d14 55%);
+  border: 1px solid rgba(50, 166, 147, .2);
+  border-radius: 11px;
+  padding: 11px 14px;
+}
+.tp-source-copy {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.tp-source-flag {
+  white-space: nowrap;
+  flex-shrink: 0;
+  color: #ffe0a1;
+  border: 1px solid rgba(239, 195, 106, .24);
+  background: rgba(239, 195, 106, .08);
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .07em;
+  padding: 6px 9px;
+}
+.tp-source-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  background: #05080d;
+  padding: 4px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.tp-source-buttons button {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  padding: 8px 11px;
+  font-size: 11px;
+  font-weight: 750;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.tp-source-buttons button:hover { color: var(--foreground); }
+.tp-source-buttons button.active {
+  background: #173b34;
+  color: var(--accent);
+}
+.tp-demo-card {
+  border-color: rgba(239, 195, 106, .22);
+  background: linear-gradient(160deg, #18160f, var(--surface) 70%);
+}
+.tp-demo-card h3 {
+  font-size: 17px;
+  margin: 10px 0;
+}
+.tp-demo-card p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.tp-demo-switch {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 11px;
+  border-radius: 7px;
+  padding: 10px;
+  font-weight: 750;
+}
+.tp-demo-switch:hover { border-color: var(--accent); }
+.tp-stream-state-demo {
+  border-color: rgba(239, 195, 106, .37);
+  color: var(--warning);
+}
+.tp-stream-state-demo .tp-stream-led { background: var(--warning); box-shadow: none; }
+@media (max-width: 800px) {
+  .tp-source-bar { flex-direction: column; align-items: stretch; }
+  .tp-source-copy { align-items: flex-start; }
+  .tp-source-buttons { width: 100%; }
+  .tp-source-buttons button { flex: 1; }
+}
+@media (max-width: 440px) {
+  .tp-source-copy { flex-direction: column; gap: 8px; }
+}
