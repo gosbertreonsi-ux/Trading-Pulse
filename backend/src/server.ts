@@ -11,6 +11,7 @@ import streamingRoutes from './routes/streams'
 import marketOverviewRoutes from './routes/marketOverview'
 import historicalAnalyticsRoutes from './routes/historicalAnalytics'
 import liquidityModelRoutes from './routes/liquidity'
+import paperOrderRoutes from './routes/paperOrders'
 import { aggregateCandlestick } from './services/aggregator'
 import { evaluateMarketTrend } from './services/predictiveCore'
 
@@ -30,6 +31,7 @@ async function start(): Promise<void> {
   await fastify.register(marketOverviewRoutes)
   await fastify.register(historicalAnalyticsRoutes)
   await fastify.register(liquidityModelRoutes)
+  await fastify.register(paperOrderRoutes)
 
   let aggregating = false
   let predicting = false
