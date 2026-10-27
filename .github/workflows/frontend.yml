@@ -45,6 +45,8 @@ jobs:
         run: node --experimental-strip-types --test tests/marketColors.test.mjs
       - name: Test live in-progress candle reconciliation
         run: node --experimental-strip-types --test tests/liveCandles.test.mjs
+      - name: Test live multi-market watchlist integrity
+        run: node --experimental-strip-types --test tests/liveWatchlist.test.mjs
       - name: Build frontend
         run: npm run build
       - name: Install ephemeral browser test dependency
