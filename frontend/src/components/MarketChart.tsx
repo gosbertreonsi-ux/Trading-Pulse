@@ -13,6 +13,7 @@ import {
   type Time,
 } from "lightweight-charts";
 import { movingAverageLine, movingAverageMarkers } from "@/lib/chartSignals";
+import { generateDemoCandles } from "@/lib/demoCandles";
 
 export type MarketSnapshot = {
   price: number;
@@ -24,6 +25,7 @@ export type MarketSnapshot = {
 type MarketChartProps = {
   symbol: string;
   timeframe: string;
+  source: "demo" | "backend";
   onSnapshot?: (snapshot: MarketSnapshot | null) => void;
 };
 
@@ -149,12 +151,13 @@ function groupCandles(
 export default function MarketChart({
   symbol,
   timeframe,
+  source,
   onSnapshot,
 }: MarketChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
-  const [streamStatus, setStreamStatus] = useState<"connecting" | "live" | "fallback">("connecting");
+  const [streamStatus, setStreamStatus] = useState<"connecting" | "live" | "fallback" | "demo">("connecting");
   const [showSignals, setShowSignals] = useState(true);
   const signalsEnabled = useRef(true);
   const overlayUpdate = useRef<((enabled: boolean) => void) | null>(null);
@@ -173,7 +176,7 @@ export default function MarketChart({
     let fetching = false;
     let reloadPending = false;
     setStatus("loading");
-    setStreamStatus(process.env.NODE_ENV === "development" ? "connecting" : "fallback");
+    setStreamStatus(source === "demo" ? "demo" : process.env.NODE_ENV === "development" ? "connecting" : "fallback");
     onSnapshot?.(null);
     const variable = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 
@@ -305,26 +308,31 @@ export default function MarketChart({
           : null;
 
 
-        const response = await fetch(
-          `/api/charts?symbol=${encodeURIComponent(symbol)}&limit=500`,
-          { cache: "no-store" },
-        );
+        let rawCandles: ApiCandle[];
+        if (source === "demo") {
+          // The explicit demo view makes NO backend/API calls.
+          rawCandles = generateDemoCandles(symbol);
+        } else {
+          const response = await fetch(
+            `/api/charts?symbol=${encodeURIComponent(symbol)}&limit=500`,
+            { cache: "no-store" },
+          );
 
-        if (!response.ok) {
-          throw new Error(`Chart request failed: ${response.status}`);
+          if (!response.ok) {
+            throw new Error(`Chart request failed: ${response.status}`);
+          }
+
+          const payload = (await response.json()) as ChartResponse;
+          rawCandles = Array.isArray(payload.candles)
+            ? payload.candles
+            : Array.isArray(payload.data)
+              ? payload.data
+              : Array.isArray(payload.data?.candles)
+                ? payload.data.candles
+                : [];
         }
 
-        const payload = (await response.json()) as ChartResponse;
-
         if (cancelled) return;
-
-        const rawCandles = Array.isArray(payload.candles)
-          ? payload.candles
-          : Array.isArray(payload.data)
-            ? payload.data
-            : Array.isArray(payload.data?.candles)
-              ? payload.data.candles
-              : [];
 
         const candles = groupCandles(rawCandles, timeframe);
 
@@ -351,7 +359,16 @@ export default function MarketChart({
         });
 
         if (!hasLoadedData) {
-          chart.timeScale().fitContent();
+          if (source === "demo") {
+            // Show a readable, cinematic sample of recent bars initially;
+            // older demo candles remain accessible by panning left.
+            chart.timeScale().setVisibleLogicalRange({
+              from: Math.max(0, candles.length - 85),
+              to: candles.length + 5,
+            });
+          } else {
+            chart.timeScale().fitContent();
+          }
           hasLoadedData = true;
         } else if (previousRange) {
           chart.timeScale().setVisibleLogicalRange(previousRange);
@@ -388,7 +405,7 @@ export default function MarketChart({
     // The Next route keeps the viewer JWT private and forwards only a notification.
     // Fall back to occasional REST refreshes if the stream is not available.
     let stream: EventSource | undefined;
-    if (process.env.NODE_ENV === "development") {
+    if (source === "backend" && process.env.NODE_ENV === "development") {
       stream = new EventSource("/api/stream?symbol=" + encodeURIComponent(symbol));
       stream.addEventListener("ready", () => {
         if (!cancelled) {
@@ -421,7 +438,7 @@ export default function MarketChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [symbol, timeframe, onSnapshot]);
+  }, [symbol, timeframe, source, onSnapshot]);
 
   return (
     <div className="tp-chart-stage">
@@ -440,13 +457,13 @@ export default function MarketChart({
       </div>
       <div className={"tp-stream-state tp-stream-state-" + streamStatus} role="status" aria-live="polite">
         <span className="tp-stream-led" aria-hidden="true" />
-        {streamStatus === "live" ? "LIVE CANDLE UPDATES" : streamStatus === "connecting" ? "CONNECTING TO STREAM" : "REST FALLBACK · 60S"}
+        {streamStatus === "demo" ? "SYNTHETIC DEMO · NO BACKEND" : streamStatus === "live" ? "LIVE CANDLE UPDATES" : streamStatus === "connecting" ? "CONNECTING TO STREAM" : "REST FALLBACK · 60S"}
       </div>
       {status !== "ready" && (
         <div className="tp-chart-state" role="status" aria-live="polite">
           <span className="tp-chart-state-glyph" aria-hidden="true">⌁</span>
-          <strong>{status === "loading" ? "Connecting to market data…" : status === "empty" ? "Waiting for candles" : "Chart data unavailable"}</strong>
-          <span>{status === "loading" ? "Retrieving stored market candles" : status === "empty" ? "Start the simulator and wait for a completed one-minute candle." : "Check the backend, Redis, database and chart API."}</span>
+          <strong>{status === "loading" ? (source === "demo" ? "Preparing chart preview…" : "Connecting to market data…") : status === "empty" ? "Waiting for candles" : "Chart data unavailable"}</strong>
+          <span>{status === "loading" ? (source === "demo" ? "Loading locally generated synthetic candles" : "Retrieving stored market candles") : status === "empty" ? "Start the simulator and wait for a completed one-minute candle." : "Check the backend, Redis, database and chart API."}</span>
         </div>
       )}
     </div>

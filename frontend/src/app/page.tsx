@@ -24,6 +24,7 @@ function formatPrice(value: number | undefined) {
 
 export default function Home() {
   const [selectedSymbol, setSelectedSymbol] = useState("BTCUSDT");
+  const [source, setSource] = useState<"demo" | "backend">(process.env.NODE_ENV === "development" ? "demo" : "backend");
   const [timeframe, setTimeframe] = useState("1m");
   const [search, setSearch] = useState("");
   const [snapshot, setSnapshot] = useState<MarketSnapshot | null>(null);
@@ -58,6 +59,22 @@ export default function Home() {
           <Link href="/studio" className="tp-primary-link"><span aria-hidden="true">✳</span> Open AI Studio <span aria-hidden="true">↗</span></Link>
         </div>
 
+        {process.env.NODE_ENV === "development" && (
+          <div className="tp-source-bar">
+            <div className="tp-source-copy">
+              <span className="tp-source-flag">{source === "demo" ? "DEMO PREVIEW" : "CONNECTED SIMULATOR"}</span>
+              <span>{source === "demo"
+                ? "Synthetic chart-only candles. No backend, live prices, trades or orders."
+                : "Uses the authenticated Fastify simulator and persisted PostgreSQL candles."}</span>
+            </div>
+            <div className="tp-source-buttons" role="group" aria-label="Select candlestick source">
+              <button type="button" className={source === "demo" ? "active" : ""} aria-pressed={source === "demo"}
+                onClick={() => { setSource("demo"); setSnapshot(null); }}>Demo preview</button>
+              <button type="button" className={source === "backend" ? "active" : ""} aria-pressed={source === "backend"}
+                onClick={() => { setSource("backend"); setSnapshot(null); }}>Connected data</button>
+            </div>
+          </div>
+        )}
         <div className="tp-metrics">
           <div className="tp-metric tp-metric-featured">
             <div className="tp-metric-heading"><span>TRACKING</span><span className="tp-small-pulse" /></div>
@@ -65,9 +82,9 @@ export default function Home() {
             <div className="tp-metric-foot">Selected market · {selected.name}</div>
           </div>
           <div className="tp-metric">
-            <div className="tp-metric-heading"><span>LAST CANDLE CLOSE</span><span aria-hidden="true">↗</span></div>
+            <div className="tp-metric-heading"><span>{source === "demo" ? "DEMO CANDLE CLOSE" : "LAST CANDLE CLOSE"}</span><span aria-hidden="true">↗</span></div>
             <div className="tp-metric-value"> {snapshot ? "$" + formatPrice(snapshot.price) : "—"}</div>
-            <div className="tp-metric-foot">From stored simulated candle data</div>
+            <div className="tp-metric-foot">{source === "demo" ? "Synthetic UI fixture · not a market price" : "From stored simulated candle data"}</div>
           </div>
           <div className="tp-metric">
             <div className="tp-metric-heading"><span>LOADED RANGE CHANGE</span><span aria-hidden="true">⌁</span></div>
@@ -76,8 +93,8 @@ export default function Home() {
           </div>
           <div className="tp-metric">
             <div className="tp-metric-heading"><span>DATA STREAM</span><span className="tp-status-orb" /></div>
-            <div className="tp-metric-value tp-metric-smaller">SIMULATED</div>
-            <div className="tp-metric-foot">Local dev stream · 60s backup refresh</div>
+            <div className="tp-metric-value tp-metric-smaller">{source === "demo" ? "DEMO ONLY" : "SIMULATED"}</div>
+            <div className="tp-metric-foot">{source === "demo" ? "Synthetic UI preview · 60s refresh" : "Local dev stream · 60s backup refresh"}</div>
           </div>
         </div>
 
@@ -86,7 +103,7 @@ export default function Home() {
             <div className="tp-chart-card-header">
               <div className="tp-pair-title">
                 <span className="tp-coin-icon" aria-hidden="true">{selected.mark}</span>
-                <div><h2>{selected.ticker}<span>/USDT</span></h2><p>{selected.name} · Historical OHLC</p></div>
+                <div><h2>{selected.ticker}<span>/USDT</span></h2><p>{selected.name} · {source === "demo" ? "Synthetic preview candles" : "Historical OHLC"}</p></div>
               </div>
               <div className="tp-market-price">
                 <strong>{snapshot ? "$" + formatPrice(snapshot.price) : "Awaiting data"}</strong>
@@ -108,7 +125,7 @@ export default function Home() {
             </div>
             <div className="tp-chart-display">
               <div className="tp-chart-watermark" aria-hidden="true">TRADING<span>PULSE</span></div>
-              <MarketChart symbol={selectedSymbol} timeframe={timeframe} onSnapshot={updateSnapshot} />
+              <MarketChart symbol={selectedSymbol} timeframe={timeframe} source={source} onSnapshot={updateSnapshot} />
               <div className="tp-chart-display-corner" aria-hidden="true"><span>MARKET</span> / ANALYTICS</div>
             </div>
             <div className="tp-chart-footer">
@@ -118,7 +135,16 @@ export default function Home() {
           </section>
 
           <aside className="tp-market-side" aria-label="Market tools">
-            <MarketConnection />
+            {source === "backend" ? <MarketConnection /> : (
+              <div className="tp-side-card tp-demo-card">
+                <div className="tp-eyebrow">UI DESIGN PREVIEW</div>
+                <h3>Preview without setup</h3>
+                <p>These candles and SMA annotations are synthetic visual examples. They never enter Redis, PostgreSQL or the trading simulator.</p>
+                <button type="button" className="tp-demo-switch" onClick={() => { setSource("backend"); setSnapshot(null); }}>
+                  Inspect connected market data ↗
+                </button>
+              </div>
+            )}
             <div className="tp-watchlist tp-side-card">
               <div className="tp-side-head"><div><span className="tp-eyebrow">YOUR MARKETS</span><h3>Watchlist</h3></div><span className="tp-count">03</span></div>
               <label className="tp-search-wrap">
@@ -137,7 +163,7 @@ export default function Home() {
                 ))}
                 {filtered.length === 0 && <p className="tp-list-empty">No matching markets.</p>}
               </div>
-              <p className="tp-disclaimer">Prices appear only when chart data is available. No fabricated quotes.</p>
+              <p className="tp-disclaimer">{source === "demo" ? "Preview prices are synthetic. Switch to Connected data for stored simulator candles." : "Prices appear only when stored chart data is available. No fabricated backend quotes."}</p>
             </div>
             <div className="tp-side-card tp-insight-card">
               <div className="tp-side-head"><div><span className="tp-eyebrow">INTELLIGENCE</span><h3>Market notes</h3></div><span className="tp-spark">✳</span></div>
@@ -147,7 +173,7 @@ export default function Home() {
             </div>
           </aside>
         </div>
-        <p className="tp-bottom-note">Trading Pulse is a development simulator. Some source prices may be market references, but generated ticks and trades are simulated.</p>
+        <p className="tp-bottom-note">{source === "demo" ? "DEMO PREVIEW — Synthetic candles for UI review only. Not live, not persisted, and not trading signals." : "Trading Pulse is a development simulator. Some source prices may be market references, but generated ticks and trades are simulated."}</p>
       </div>
     </AppShell>
   );

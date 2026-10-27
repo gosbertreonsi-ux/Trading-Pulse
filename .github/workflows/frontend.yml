@@ -39,5 +39,7 @@ jobs:
         run: node --experimental-strip-types --test tests/chartSignals.test.mjs
       - name: Test local diagnostic classifications
         run: node --experimental-strip-types --test tests/devDiagnostics.test.mjs
+      - name: Test synthetic preview candles
+        run: node --experimental-strip-types --test tests/demoCandles.test.mjs
       - name: Build frontend
         run: npm run build
