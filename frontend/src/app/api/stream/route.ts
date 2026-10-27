@@ -26,7 +26,10 @@ export async function GET(request: NextRequest) {
   }
 
   const symbol = request.nextUrl.searchParams.get("symbol");
-  if (!symbol || !/^[A-Z0-9]{3,10}$/.test(symbol)) {
+  // ALL is reserved for the three bounded watchlist markets; it is not a
+  // wildcard subscription to arbitrary future backend instruments.
+  const supported = new Set(["BTCUSDT", "ETHUSDT", "SOLUSDT"]);
+  if (!symbol || (symbol !== "ALL" && !supported.has(symbol))) {
     return NextResponse.json({ error: "A valid market symbol is required." }, { status: 400 });
   }
 
@@ -119,7 +122,9 @@ export async function GET(request: NextRequest) {
           const data: unknown = JSON.parse(event.data);
           if (!data || typeof data !== "object") return;
           const item = data as Record<string, unknown>;
-          if (item.symbol !== symbol) return;
+          const itemSymbol = item.symbol;
+          if (typeof itemSymbol !== "string") return;
+          if (symbol === "ALL" ? !supported.has(itemSymbol) : itemSymbol !== symbol) return;
 
           if (item.type === "TICK") {
             const price = item.price;
@@ -134,11 +139,12 @@ export async function GET(request: NextRequest) {
             // Accept only tenant-filtered upstream records for this symbol.
             // Forward essential tick fields, never claims or auth headers.
             write("event: tick\ndata: " + JSON.stringify({
-              symbol, price, quantity, timestamp,
+              symbol: itemSymbol, price, quantity, timestamp,
             }) + "\n\n");
             return;
           }
 
+          if (symbol === "ALL") return; // Watchlist only needs ticks.
           if (
             item.type !== "CANDLE" ||
             item.completed !== true ||
