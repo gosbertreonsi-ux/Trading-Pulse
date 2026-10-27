@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function GET(request: NextRequest) {
   const token = process.env.TRADING_PULSE_VIEWER_JWT
   const backendUrl =
-    process.env.TRADING_PULSE_API_URL ?? 'http://localhost:3000'
+    process.env.TRADING_PULSE_API_URL ?? 'http://127.0.0.1:3001'
 
   if (!token) {
     return NextResponse.json(
