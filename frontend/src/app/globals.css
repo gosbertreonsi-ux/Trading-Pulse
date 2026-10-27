@@ -3,39 +3,23 @@
 
 :root {
   color-scheme: dark;
-  --background: #080b12;
-  --surface: #0d121c;
-  --surface-elevated: #111927;
-  --surface-hover: #172131;
-  --foreground: #e8edf6;
-  --muted: #8793a7;
-  --subtle: #5f6b80;
-  --border: rgba(151, 169, 196, 0.12);
-  --accent: #47e3d0;
-  --accent-strong: #27cdbb;
-  --positive: #36d6a0;
-  --negative: #ff687d;
-  --warning: #f4c66a;
-  --chart-grid: rgba(151, 169, 196, 0.1);
+  --background: #03060a;
+  --surface: #070b11;
+  --surface-elevated: #0b1119;
+  --surface-hover: #101824;
+  --foreground: #edf3fb;
+  --muted: #8fa0b5;
+  --subtle: #5f6f83;
+  --border: rgba(130, 155, 185, 0.14);
+  --accent: #2ce6c9;
+  --accent-strong: #12cdb0;
+  --positive: #08edae;
+  --negative: #ff4768;
+  --warning: #efc36a;
+  --chart-grid: rgba(120, 150, 180, 0.065);
 }
 
-:root[data-theme="light"] {
-  color-scheme: light;
-  --background: #f3f6fa;
-  --surface: #ffffff;
-  --surface-elevated: #ffffff;
-  --surface-hover: #edf2f7;
-  --foreground: #172033;
-  --muted: #66748a;
-  --subtle: #8c98aa;
-  --border: rgba(39, 57, 83, 0.12);
-  --accent: #087f8c;
-  --accent-strong: #066b76;
-  --positive: #078b65;
-  --negative: #d83f58;
-  --warning: #996b13;
-  --chart-grid: rgba(39, 57, 83, 0.09);
-}
+
 
 @theme inline {
   --color-background: var(--background);
@@ -258,39 +242,7 @@ textarea:focus-visible {
 
 
 /* Trading Pulse / cinematic workstation design */
-:root {
-  --background: #080b11;
-  --surface: #10151f;
-  --surface-elevated: #161d29;
-  --surface-hover: #1b2633;
-  --foreground: #f2f5f9;
-  --muted: #9aa6b7;
-  --subtle: #66768c;
-  --border: rgba(184, 208, 226, .11);
-  --accent: #50e2cb;
-  --accent-strong: #35c5b1;
-  --positive: #31dfac;
-  --negative: #fb6877;
-  --warning: #efb867;
-  --chart-grid: rgba(151,169,196,.055);
-}
-:root[data-theme="light"] {
-  --background: #f2f5f8;
-  --surface: #ffffff;
-  --surface-elevated: #f5f8fc;
-  --surface-hover: #ebf2f7;
-  --foreground: #152335;
-  --muted: #596a80;
-  --subtle: #7a889a;
-  --border: rgba(37,57,80,.13);
-  --accent: #007e83;
-  --accent-strong: #006d71;
-  --positive: #078b65;
-  --negative: #d83f58;
-  --warning: #996b13;
-  --chart-grid: rgba(39,57,83,.075);
-}
-.tp-app { min-height:100dvh; display:grid; grid-template-columns:226px minmax(0,1fr); background:var(--background); color:var(--foreground); }
+
 .tp-sidebar { background:var(--surface); border-right:1px solid var(--border); padding:28px 15px 20px; display:flex; flex-direction:column; min-height:100dvh; position:sticky; top:0; height:100dvh; z-index:5; }
 .tp-brand { display:flex; align-items:center; gap:10px; color:var(--foreground); text-decoration:none; padding:3px 8px 48px; }
 .tp-brand-mark { height:38px; width:38px; border-radius:12px; background:#52debf; display:grid; place-items:center; box-shadow:0 0 30px rgba(40,220,180,.19); }
@@ -441,7 +393,7 @@ textarea:focus-visible {
 .tp-code-tab { padding:8px 11px; border-radius:7px; background:var(--surface-elevated); border:1px solid var(--border); color:var(--muted); font-size:11px; }
 .tp-code-tab.active { color:var(--accent); border-color:rgba(80,226,203,.3); }
 .tp-code-editor { width:100%; flex:1; min-height:300px; line-height:1.65; font:12px/1.6 "Cascadia Code", Consolas, monospace; background:#090f18; border:1px solid var(--border); color:#d4e7e6; border-radius:10px; padding:16px; resize:vertical; white-space:pre; tab-size:2; outline:none; }
-:root[data-theme="light"] .tp-code-editor { background:#eaf1f5; color:#162c3b; }
+
 .tp-code-placeholder { display:flex; align-items:center; justify-content:center; flex-direction:column; gap:12px; padding:30px; color:var(--muted); flex:1; background:var(--surface-elevated); border:1px dashed var(--border); border-radius:10px; text-align:center; min-height:310px; }
 .tp-code-placeholder-symbol { font-size:38px; color:var(--accent); }
 .tp-code-placeholder strong { color:var(--foreground); font-size:16px; }
@@ -602,14 +554,34 @@ textarea:focus-visible {
   color: #09efac;
 }
 .tp-signal-toggle:hover { border-color: #71d3bc; }
-:root[data-theme="light"] .tp-chart-stage {
-  background: radial-gradient(ellipse at 60% 15%, rgba(20, 130, 155, .06), transparent 65%), #f6fafb;
-}
-:root[data-theme="light"] .tp-chart-stage::before { opacity: .15; }
-:root[data-theme="light"] .tp-signal-method { background: rgba(248, 251, 251, .92); color: #496b78; border-color: rgba(24, 83, 95, .22); }
-:root[data-theme="light"] .tp-signal-toggle { background: #f4f8f9; color: #476774; border-color: #b8cbd0; }
-:root[data-theme="light"] .tp-signal-toggle.active { color: #087c68; border-color: #149980; }
+
+
+
+
+
 @media (max-width: 580px) {
   .tp-signal-controls { top: 38px; right: 18px; gap: 5px; }
   .tp-signal-method { font-size: 8px; }
 }
+
+
+/* Reference-locked dark workstation. The market SVG stays behind candle prices. */
+.tp-app, .tp-app-main { background: var(--background); }
+.tp-sidebar, .tp-topbar { background: #060a10; }
+.tp-chart-card {
+  background: linear-gradient(180deg, #070c13 0%, #050a10 100%);
+  border: 1px solid rgba(104, 137, 156, 0.17);
+  box-shadow: 0 16px 54px rgba(0, 0, 0, 0.48);
+}
+.tp-chart-stage {
+  background:
+    radial-gradient(ellipse at 73% 10%, rgba(9, 127, 111, 0.075), transparent 42%),
+    radial-gradient(ellipse at 15% 86%, rgba(38, 52, 82, 0.09), transparent 48%),
+    linear-gradient(180deg, #04080e 0%, #07101a 100%);
+}
+.tp-chart-stage::before { opacity: 0.21; }
+.tp-chart-display::before { background: radial-gradient(ellipse at 48% 7%, rgba(6, 156, 120, .038), transparent 70%); }
+.tp-metric, .tp-side-card, .tp-studio-panel, .tp-studio-review { background-color: var(--surface); }
+.tp-metric-featured { background: linear-gradient(135deg, rgba(31, 184, 149, .13), var(--surface) 79%); }
+.tp-insight-card { background: linear-gradient(160deg, rgba(22, 122, 104, .10), var(--surface) 55%); }
+.tp-coin-icon { box-shadow: 0 0 20px rgba(220, 153, 50, .08); }

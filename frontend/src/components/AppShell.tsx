@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 type AppShellProps = { children: ReactNode };
 
@@ -11,32 +11,8 @@ const navigation = [
   { href: "/studio", label: "AI Studio", glyph: "✳", description: "Build workspace" },
 ];
 
-function readTheme(): "dark" | "light" {
-  if (typeof window === "undefined") return "dark";
-  return window.localStorage.getItem("trading-pulse-theme") === "light" ? "light" : "dark";
-}
-
-function subscribeToTheme(onChange: () => void) {
-  window.addEventListener("storage", onChange);
-  window.addEventListener("trading-pulse-theme-change", onChange);
-  return () => {
-    window.removeEventListener("storage", onChange);
-    window.removeEventListener("trading-pulse-theme-change", onChange);
-  };
-}
-
 export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
-  const theme = useSyncExternalStore(subscribeToTheme, readTheme, () => "dark");
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
-
-  function toggleTheme() {
-    window.localStorage.setItem("trading-pulse-theme", theme === "dark" ? "light" : "dark");
-    window.dispatchEvent(new Event("trading-pulse-theme-change"));
-  }
 
   const isStudio = pathname.startsWith("/studio");
 
@@ -82,9 +58,6 @@ export default function AppShell({ children }: AppShellProps) {
           </div>
           <div className="tp-topbar-actions">
             <span className="tp-topbar-label"><span className="tp-dot" /> DEVELOPMENT BUILD</span>
-            <button className="tp-icon-button" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} title="Toggle theme">
-              {theme === "dark" ? "☼" : "☾"}
-            </button>
             <span className="tp-avatar" title="Local workspace">TP</span>
           </div>
         </header>
