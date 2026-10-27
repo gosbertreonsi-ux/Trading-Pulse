@@ -31,7 +31,7 @@ export default function AppShell({ children }: AppShellProps) {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-  }, [theme]);
+  }, []);
 
   function toggleTheme() {
     window.localStorage.setItem("trading-pulse-theme", theme === "dark" ? "light" : "dark");
