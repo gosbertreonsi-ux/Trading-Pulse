@@ -228,6 +228,72 @@ async function inspectHistoricalAnalytics(viewport) {
   }
 }
 
+async function inspectLiquidity(viewport) {
+  const page = await browser.newPage({ viewport });
+  try {
+    await page.route("**/api/liquidity?*", async route => {
+      const symbol = new URL(route.request().url()).searchParams.get("symbol");
+      const empty = symbol === "SOLUSDT";
+      const bids = empty ? [] : Array.from({ length: 10 }, (_, i) => ({
+        price: 99 - i, quantity: 2 + i / 10, cumulativeQuantity: (i + 1) * 2,
+      }));
+      const asks = empty ? [] : Array.from({ length: 10 }, (_, i) => ({
+        price: 101 + i, quantity: 1 + i / 10, cumulativeQuantity: (i + 1),
+      }));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        success: true, symbol,
+        modelType: "EDUCATIONAL_SYNTHETIC_DEPTH",
+        basedOn: "LAST_PERSISTED_SIMULATOR_TRADES",
+        observedWindow: "last-48-simulator-trades",
+        observed: {
+          sampleCount: empty ? 0 : 2, lastPrice: empty ? null : 100,
+          lastTradeAt: empty ? null : "2026-10-27T12:34:06Z",
+          buyQuantity: empty ? 0 : 3, sellQuantity: empty ? 0 : 1,
+        },
+        assumptions: {
+          tickSize: 1, depthLevels: 10,
+          quantityModel: "Deterministic illustrative sizes, not actual resting orders.",
+          limitations: "No executable bids or asks.",
+        },
+        bids, asks,
+        bestBid: empty ? null : 99, bestAsk: empty ? null : 101,
+        spread: empty ? null : 2,
+        modeledBidQuantity: empty ? null : 20,
+        modeledAskQuantity: empty ? null : 10,
+        modeledImbalancePercent: empty ? null : 33.33,
+      }) });
+    });
+    const response = await page.goto(origin + "/liquidity", { waitUntil: "domcontentloaded" });
+    assert.equal(response?.status(), 200);
+    await page.getByRole("heading", { name: "Liquidity model." }).waitFor({ state: "visible" });
+    await page.locator(".lq-summary").waitFor({ state: "visible" });
+    await page.getByText("EDUCATIONAL MODEL — NOT REAL ORDER-BOOK LIQUIDITY").waitFor();
+    assert.equal(await page.locator(".lq-bid .lq-book-row").count(), 10);
+    assert.equal(await page.locator(".lq-ask .lq-book-row").count(), 10);
+    assert.equal(await page.locator(".lq-flow-stats strong").nth(0).textContent(), "3.0000");
+    assert.equal(await page.locator(".lq-flow-stats strong").nth(1).textContent(), "1.0000");
+    const geom = await page.evaluate(() => ({
+      width: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+    }));
+    assert.ok(geom.scrollWidth <= geom.width + 6, "Liquidity page must not overflow: " + JSON.stringify(geom));
+    await page.locator("#lq-market").selectOption("SOLUSDT");
+    await page.getByText("No stored simulator trades for this market and tenant.").waitFor({
+      timeout: 12000,
+    }).catch(async () => { // The guidance sentence includes an additional newline in JSX.
+      await page.locator(".lq-feedback").last().waitFor();
+    });
+    assert.equal(await page.locator(".lq-bid .lq-book-row").count(), 0);
+    assert.equal(await page.locator(".lq-ask .lq-book-row").count(), 0);
+    await page.getByRole("button", { name: "Switch to light mode" }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.theme === "light");
+    const panel = await page.locator(".lq-card").first().evaluate(element => getComputedStyle(element).backgroundColor);
+    assert.equal(panel, "rgb(255, 255, 255)");
+    console.log("PASS educational liquidity " + JSON.stringify({ viewport, geom, panel }));
+  } finally {
+    await page.close();
+  }
+}
+
 async function inspectAlerts() {
   const page = await browser.newPage({ viewport: { width: 1390, height: 780 } });
   try {
@@ -281,6 +347,8 @@ try {
   await inspectConnectedWatchlist();
   await inspectHistoricalAnalytics({ width: 1390, height: 780 });
   await inspectHistoricalAnalytics({ width: 390, height: 844 });
+  await inspectLiquidity({ width: 1390, height: 780 });
+  await inspectLiquidity({ width: 390, height: 844 });
 } finally {
   if (browser) await browser.close();
   app.kill("SIGTERM");
