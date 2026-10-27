@@ -125,6 +125,25 @@ async function inspectPage(viewport, screenshot) {
   }
 }
 
+async function inspectAlerts() {
+  const page = await browser.newPage({ viewport: { width: 1390, height: 780 } });
+  try {
+    const response = await page.goto(origin + "/alerts", { waitUntil: "domcontentloaded" });
+    assert.equal(response?.status(), 200);
+    await page.getByRole("heading", { name: "Price alerts." }).waitFor({ state: "visible" });
+    assert.equal(await page.getByRole("button", { name: /Create price alert/ }).count(), 1);
+    assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+    await page.getByRole("button", { name: "Switch to light mode" }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.theme === "light");
+    const panel = await page.locator(".pa-card").first().evaluate(element => getComputedStyle(element).backgroundColor);
+    assert.equal(panel, "rgb(255, 255, 255)");
+    await page.screenshot({ path: "alerts-desktop-light.png", fullPage: true });
+    console.log("PASS alerts " + JSON.stringify({ panel }));
+  } finally {
+    await page.close();
+  }
+}
+
 async function inspectStudio() {
   const page = await browser.newPage({ viewport: { width: 1390, height: 780 } });
   try {
@@ -155,6 +174,7 @@ try {
   await inspectPage({ width: 1390, height: 780 }, "broker-desktop.png");
   await inspectPage({ width: 390, height: 844 }, "broker-mobile.png");
   await inspectStudio();
+  await inspectAlerts();
 } finally {
   if (browser) await browser.close();
   app.kill("SIGTERM");
